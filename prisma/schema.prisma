@@ -86,6 +86,12 @@ model proveedores {
   productos    productos[]
 }
 
+model usuario {
+  id_usuario Int    @id @default(autoincrement())
+  username   String @unique @db.VarChar(50)
+  password   String @db.VarChar(255)
+}
+
 enum pedidos_estado {
   pendiente
   enviado
