@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    /* ============================================================
+       [Migración TS] Configuración de TypeScript - modo estricto (strict: true)
+       El proyecto usa ESM (package.json → "type": "module"), por eso
+       module/moduleResolution son NodeNext: obliga a escribir las
+       extensiones .js en los imports relativos (TypeScript resuelve el
+       archivo .ts real). Es la convención estándar de TS + ESM.
+       ============================================================ */
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,              // Chequeo estricto: tipado obligatorio, null checks, etc.
+    "esModuleInterop": true,     // Permite importar módulos CommonJS (express, mysql2) con import normal
+    "skipLibCheck": true,        // No revisa los .d.ts de node_modules (más rápido)
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,              // Solo chequea tipos: la ejecución la hace tsx (no genera archivos JS)
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}
