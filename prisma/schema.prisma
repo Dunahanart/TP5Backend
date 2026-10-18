@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model clientes {
+  id_cliente Int       @id @default(autoincrement())
+  nombre     String    @db.VarChar(50)
+  apellido   String    @db.VarChar(50)
+  dni        String    @unique(map: "dni") @db.VarChar(15)
+  direccion  String?   @db.VarChar(150)
+  telefono   String?   @db.VarChar(20)
+  pedidos    pedidos[]
+}
+
+model companias_envio {
+  id_compania Int       @id @default(autoincrement())
+  nombre      String    @db.VarChar(100)
+  telefono    String?   @db.VarChar(20)
+  pedidos     pedidos[]
+}
+
+model detalles_pedido {
+  id_detalle      Int        @id @default(autoincrement())
+  id_pedido       Int?
+  id_producto     Int?
+  cantidad        Int
+  precio_unitario Decimal    @db.Decimal(10, 2)
+  subtotal        Decimal    @db.Decimal(10, 2)
+  pedidos         pedidos?   @relation(fields: [id_pedido], references: [id_pedido], onDelete: Cascade, map: "fk_detalles_pedido")
+  productos       productos? @relation(fields: [id_producto], references: [id_producto], onDelete: Restrict, map: "fk_detalles_producto")
+
+  @@unique([id_pedido, id_producto], map: "pedido_producto")
+  @@index([id_producto], map: "fk_detalles_producto")
+}
+
+model empleados {
+  id_empleado Int       @id @default(autoincrement())
+  nombre      String    @db.VarChar(50)
+  apellido    String    @db.VarChar(50)
+  cargo       String?   @db.VarChar(50)
+  pedidos     pedidos[]
+}
+
+model pedidos {
+  id_pedido       Int               @id @default(autoincrement())
+  fecha           DateTime?         @default(now()) @db.DateTime(0)
+  total           Decimal           @default(0.00) @db.Decimal(10, 2)
+  estado          pedidos_estado    @default(pendiente)
+  id_cliente      Int?
+  id_empleado     Int?
+  id_compania     Int?
+  detalles_pedido detalles_pedido[]
+  clientes        clientes?         @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, map: "fk_pedidos_cliente")
+  companias_envio companias_envio?  @relation(fields: [id_compania], references: [id_compania], map: "fk_pedidos_compania")
+  empleados       empleados?        @relation(fields: [id_empleado], references: [id_empleado], map: "fk_pedidos_empleado")
+
+  @@index([id_cliente], map: "fk_pedidos_cliente")
+  @@index([id_compania], map: "fk_pedidos_compania")
+  @@index([id_empleado], map: "fk_pedidos_empleado")
+}
+
+model productos {
+  id_producto     Int               @id @default(autoincrement())
+  nombre          String            @db.VarChar(100)
+  descripcion     String?           @db.Text
+  precio_unitario Decimal           @db.Decimal(10, 2)
+  stock           Int               @default(0)
+  id_proveedor    Int?
+  detalles_pedido detalles_pedido[]
+  proveedores     proveedores?      @relation(fields: [id_proveedor], references: [id_proveedor], map: "fk_productos_proveedor")
+
+  @@index([id_proveedor], map: "fk_productos_proveedor")
+}
+
+model proveedores {
+  id_proveedor Int         @id @default(autoincrement())
+  razon_social String      @db.VarChar(100)
+  cuit         String      @unique(map: "cuit") @db.VarChar(15)
+  telefono     String?     @db.VarChar(20)
+  email        String?     @db.VarChar(100)
+  productos    productos[]
+}
+
+enum pedidos_estado {
+  pendiente
+  enviado
+  entregado
+  cancelado
+}
