@@ -1,3 +1,4 @@
+import morgan from 'morgan';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import type { RowDataPacket } from 'mysql2';
 import pool from './config/db.js';
@@ -16,6 +17,7 @@ import detallesPedidoRoutes from './routes/detalles_pedido.routes.js';
 // vive en index.ts, igual que el ejemplo de la cátedra.
 const app = express();
 
+app.use(morgan('combined'));
 app.use(express.json());
 
 app.get('/api/ping', async (req: Request, res: Response, next: NextFunction) => {
