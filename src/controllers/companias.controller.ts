@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 // responde 409 (FK con datos asociados) o 400 en vez de un 500 genérico.
 // [Migración TS] Antes era companias.controller.mjs.
 import companiaModel from '../models/companias.model.js';
+import { leerId, ID_INVALIDO } from '../utils/params.js';
 
 class CompaniaController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -16,7 +17,7 @@ class CompaniaController {
             }
 
             const resultado = await companiaModel.crear(req.body);
-            res.status(201).json({ mensaje: "Compañía de envío creada exitosamente", id_compania: resultado.insertId });
+            res.status(201).json({ mensaje: "Compañía de envío creada exitosamente", id_compania: resultado.id_compania });
         } catch (error) {
             console.error("Error al crear compañía de envío:", error);
             next(error);
@@ -35,7 +36,11 @@ class CompaniaController {
 
     async obtenerPorId(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const compania = await companiaModel.obtenerPorId(id);
 
             if (!compania) {
@@ -52,13 +57,13 @@ class CompaniaController {
 
     async actualizar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
-            const resultado = await companiaModel.actualizar(id, req.body);
-
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Compañía de envío no encontrada." });
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
                 return;
             }
+            await companiaModel.actualizar(id, req.body);
+
             res.status(200).json({ mensaje: "Compañía de envío actualizada exitosamente" });
         } catch (error) {
             console.error("Error al actualizar compañía de envío:", error);
@@ -68,13 +73,13 @@ class CompaniaController {
 
     async eliminar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
-            const resultado = await companiaModel.eliminar(id);
-
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Compañía de envío no encontrada." });
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
                 return;
             }
+            await companiaModel.eliminar(id);
+
             res.status(200).json({ mensaje: "Compañía de envío eliminada exitosamente" });
         } catch (error) {
             console.error("Error al eliminar compañía de envío:", error);
@@ -84,7 +89,11 @@ class CompaniaController {
 
     async actualizarParcial(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const resultado = await companiaModel.actualizarParcial(id, req.body);
 
             if (!resultado) {
@@ -92,10 +101,6 @@ class CompaniaController {
                 return;
             }
 
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Compañía de envío no encontrada." });
-                return;
-            }
 
             res.status(200).json({ mensaje: "Compañía de envío actualizada parcialmente" });
         } catch (error) {

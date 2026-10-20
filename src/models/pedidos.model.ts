@@ -1,163 +1,144 @@
-import type { ResultSetHeader, RowDataPacket } from 'mysql2';
-import pool from '../config/db.js';
-import type { ReglaFiltro } from '../types/filtros.js';
+import type { Prisma } from '../generated/prisma/client.js';
+import prisma from '../config/prisma.js';
 
 // ============================================================
-//  [CAMBIO TP4] Model de pedidos - Correcciones del profesor aplicadas:
-//   * CORRECCION 4: el pedido ahora tiene 'estado'
-//     (ENUM pendiente / enviado / entregado / cancelado)
-//     - Se guarda en crear() y actualizar()
-//     - Se muestra en obtenerTodos() y obtenerPorId()
-//     - Se agrega como filtro: GET /api/pedidos?estado=entregado
-//   * [CAMBIO interno] Los campos opcionales no enviados llegan como
-//     `undefined` y mysql2 NO los acepta en execute(): se normalizan a null.
-//  [Migración TS] Antes era pedidos.model.mjs.
+//  [TP5 - Migración a Prisma] Model de pedidos
+//  Mantiene lo del TP4 (corrección 4: campo 'estado'), pero ahora:
+//   * los JOINs se hacen con `include` (Prisma arma el JOIN)
+//   * los filtros se arman en un objeto `where`
+//   * COUNT/SUM/AVG/MAX/MIN con aggregate() y groupBy()
 // ============================================================
 class PedidoModel {
     // CREATE
-    async crear(pedido: Record<string, any>): Promise<ResultSetHeader> {
-        // Si no mandan total, por defecto 0.00; si no mandan estado, 'pendiente'
-        // (el mismo default que define la base de datos en la columna ENUM)
+    async crear(pedido: Record<string, any>) {
+        // Si no mandan total → 0.00; si no mandan estado → 'pendiente' (mismo default que la BD)
         const { total = 0.00, estado = 'pendiente', id_cliente, id_empleado, id_compania } = pedido;
-        const query = 'INSERT INTO pedidos (total, estado, id_cliente, id_empleado, id_compania) VALUES (?, ?, ?, ?, ?)';
-        // [CAMBIO TP4] undefined → null: sin esto, crear un pedido sin id_empleado
-        // revienta con "Bind parameters must not contain undefined" (500)
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [total, estado, id_cliente, id_empleado, id_compania].map(v => v ?? null)
-        );
-        return resultado;
+        return prisma.pedidos.create({
+            data: { total, estado, id_cliente, id_empleado: id_empleado ?? null, id_compania: id_compania ?? null }
+        });
     }
 
-    // READ (Acá aplicamos los JOINs + filtrados opcionales)
-    async obtenerTodos(filtros: Record<string, any> = {}): Promise<RowDataPacket[]> {
-        // Whitelist: los filtros apuntan a los alias de las tablas del JOIN
-        const mapaFiltros: Record<string, ReglaFiltro> = {
-            cliente:  { columna: 'c.nombre', like: true },
-            empleado: { columna: 'e.nombre', like: true },
-            // [CORRECCION 4] Filtro nuevo: /api/pedidos?estado=entregado
-            estado:   { columna: 'p.estado' },
-            desde:    { columna: 'p.fecha', operador: '>=' },   // /api/pedidos?desde=2026-01-01
-            hasta:    { columna: 'p.fecha', operador: '<'  }    // /api/pedidos?hasta=2026-12-31
-        };
+    // READ: LEFT JOIN con clientes, empleados y compañías + filtros opcionales
+    //   /api/pedidos?cliente=ana&empleado=carlos&estado=entregado&desde=2026-09-01&hasta=2026-10-01
+    async obtenerTodos(filtros: Record<string, any> = {}) {
+        const where: Prisma.pedidosWhereInput = {};
+        if (filtros.cliente) where.clientes = { nombre: { contains: String(filtros.cliente) } };
+        if (filtros.empleado) where.empleados = { nombre: { contains: String(filtros.empleado) } };
+        // [CORRECCION 4] Filtro por estado. Si el valor no existe en el ENUM, Prisma lanza
+        // un error de validación y el errorHandler responde 400.
+        if (filtros.estado) where.estado = String(filtros.estado) as Prisma.pedidosWhereInput['estado'];
 
-        const condiciones: string[] = [];
-        const valores: any[] = [];
+        const fecha: Prisma.DateTimeNullableFilter = {};
+        if (filtros.desde) fecha.gte = new Date(String(filtros.desde));   // fecha >= desde
+        if (filtros.hasta) fecha.lt = new Date(String(filtros.hasta));    // fecha <  hasta
+        if (Object.keys(fecha).length > 0) where.fecha = fecha;
 
-        for (const [parametro, regla] of Object.entries(mapaFiltros)) {
-            const valor = filtros[parametro];
-            if (valor === undefined || valor === '') continue;
-
-            if (regla.like) {
-                condiciones.push(`${regla.columna} LIKE ?`);
-                valores.push(`%${valor}%`);
-            } else {
-                const operador = regla.operador || '=';
-                condiciones.push(`${regla.columna} ${operador} ?`);
-                valores.push(valor);
+        const pedidos = await prisma.pedidos.findMany({
+            where,
+            include: {
+                clientes: { select: { nombre: true, apellido: true } },
+                empleados: { select: { nombre: true, apellido: true } },
+                companias_envio: { select: { nombre: true } }
             }
-        }
+        });
 
-        let query = `
-            SELECT
-                p.id_pedido,
-                p.fecha,
-                p.total,
-                p.estado,                       -- [CORRECCION 4] El listado ahora muestra el estado
-                c.nombre AS cliente_nombre,
-                c.apellido AS cliente_apellido,
-                e.nombre AS empleado_nombre,
-                e.apellido AS empleado_apellido,
-                env.nombre AS compania_nombre
-            FROM pedidos p
-            LEFT JOIN clientes c ON p.id_cliente = c.id_cliente
-            LEFT JOIN empleados e ON p.id_empleado = e.id_empleado
-            LEFT JOIN companias_envio env ON p.id_compania = env.id_compania
-        `;
-
-        if (condiciones.length > 0) query += ` WHERE ${condiciones.join(' AND ')}`;
-
-        const [filas] = await pool.query<RowDataPacket[]>(query, valores);
-        return filas;
+        // Se aplana el resultado para que la API responda igual que en el TP4
+        return pedidos.map(p => ({
+            id_pedido: p.id_pedido,
+            fecha: p.fecha,
+            total: p.total,
+            estado: p.estado,
+            cliente_nombre: p.clientes?.nombre ?? null,
+            cliente_apellido: p.clientes?.apellido ?? null,
+            empleado_nombre: p.empleados?.nombre ?? null,
+            empleado_apellido: p.empleados?.apellido ?? null,
+            compania_nombre: p.companias_envio?.nombre ?? null
+        }));
     }
 
     // AGGREGATION: COUNT, SUM, AVG, MAX y MIN sobre los pedidos
-    async obtenerEstadisticas(): Promise<RowDataPacket> {
-        const query = `
-            SELECT COUNT(*) AS cantidad,
-                   SUM(total) AS total,
-                   AVG(total) AS promedio,
-                   MAX(total) AS maximo,
-                   MIN(total) AS minimo
-            FROM pedidos
-        `;
-        const [filas] = await pool.query<RowDataPacket[]>(query);
-        return filas[0];
+    async obtenerEstadisticas() {
+        const r = await prisma.pedidos.aggregate({
+            _count: true,
+            _sum: { total: true },
+            _avg: { total: true },
+            _max: { total: true },
+            _min: { total: true }
+        });
+        return {
+            cantidad: r._count,
+            total: r._sum.total,
+            promedio: r._avg.total,
+            maximo: r._max.total,
+            minimo: r._min.total
+        };
     }
 
-    // AGGREGATION (SUM + COUNT + JOIN + GROUP BY): cuánto gastó cada cliente
-    async obtenerTotalesPorCliente(): Promise<RowDataPacket[]> {
-        const query = `
-            SELECT c.id_cliente, c.nombre, c.apellido,
-                   COUNT(p.id_pedido) AS pedidos,
-                   IFNULL(SUM(p.total), 0) AS total_gastado
-            FROM clientes c
-            LEFT JOIN pedidos p ON c.id_cliente = p.id_cliente
-            GROUP BY c.id_cliente, c.nombre, c.apellido
-            ORDER BY total_gastado DESC
-        `;
-        const [filas] = await pool.query<RowDataPacket[]>(query);
-        return filas;
+    // AGGREGATION: cuánto gastó cada cliente (SUM + COUNT + GROUP BY)
+    //   Todos los clientes aparecen, también los que no compraron (total 0).
+    async obtenerTotalesPorCliente() {
+        const [clientes, totales] = await Promise.all([
+            prisma.clientes.findMany({
+                select: { id_cliente: true, nombre: true, apellido: true, _count: { select: { pedidos: true } } }
+            }),
+            prisma.pedidos.groupBy({ by: ['id_cliente'], _sum: { total: true } })
+        ]);
+
+        const gastadoPorCliente = new Map(totales.map(t => [t.id_cliente, Number(t._sum.total ?? 0)]));
+        return clientes
+            .map(c => ({
+                id_cliente: c.id_cliente,
+                nombre: c.nombre,
+                apellido: c.apellido,
+                pedidos: c._count.pedidos,
+                total_gastado: gastadoPorCliente.get(c.id_cliente) ?? 0
+            }))
+            .sort((a, b) => b.total_gastado - a.total_gastado);
     }
 
-    // READ by ID
-    async obtenerPorId(id: string): Promise<RowDataPacket | undefined> {
-        const query = `
-            SELECT p.*, c.nombre AS cliente, e.nombre AS empleado, env.nombre AS compania
-            FROM pedidos p
-            LEFT JOIN clientes c ON p.id_cliente = c.id_cliente
-            LEFT JOIN empleados e ON p.id_empleado = e.id_empleado
-            LEFT JOIN companias_envio env ON p.id_compania = env.id_compania
-            WHERE p.id_pedido = ?
-        `;
-        const [filas] = await pool.query<RowDataPacket[]>(query, [id]);
-        return filas[0];
+    // READ by ID (con los nombres del cliente, empleado y compañía)
+    async obtenerPorId(id: number) {
+        const p = await prisma.pedidos.findUnique({
+            where: { id_pedido: id },
+            include: {
+                clientes: { select: { nombre: true } },
+                empleados: { select: { nombre: true } },
+                companias_envio: { select: { nombre: true } }
+            }
+        });
+        if (!p) return null;
+
+        const { clientes, empleados, companias_envio, ...pedido } = p;
+        return {
+            ...pedido,
+            cliente: clientes?.nombre ?? null,
+            empleado: empleados?.nombre ?? null,
+            compania: companias_envio?.nombre ?? null
+        };
     }
 
-    // UPDATE (Actualizar estado o total)
-    async actualizar(id: string, pedido: Record<string, any>): Promise<ResultSetHeader> {
+    // UPDATE (PUT)
+    async actualizar(id: number, pedido: Record<string, any>) {
         // [CORRECCION 4] El PUT también actualiza el estado del pedido
         const { total, estado = 'pendiente', id_cliente, id_empleado, id_compania } = pedido;
-        const query = 'UPDATE pedidos SET total = ?, estado = ?, id_cliente = ?, id_empleado = ?, id_compania = ? WHERE id_pedido = ?';
-        // (misma normalización undefined → null que en crear)
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [total, estado, id_cliente, id_empleado, id_compania, id].map(v => v ?? null)
-        );
-        return resultado;
+        return prisma.pedidos.update({
+            where: { id_pedido: id },
+            data: { total, estado, id_cliente, id_empleado: id_empleado ?? null, id_compania: id_compania ?? null }
+        });
     }
 
-    // UPDATE PARCIAL (PATCH): actualiza solo los campos enviados
-    async actualizarParcial(id: string, pedido: Record<string, any>): Promise<ResultSetHeader | null> {
+    // UPDATE PARCIAL (PATCH)
+    async actualizarParcial(id: number, pedido: Record<string, any>) {
         // [CORRECCION 4] 'estado' entra en la whitelist de campos modificables
         const permitidas = ['total', 'estado', 'id_cliente', 'id_empleado', 'id_compania'];
-        const campos = Object.entries(pedido).filter(([campo]) => permitidas.includes(campo));
-
-        if (campos.length === 0) return null;
-
-        const sets = campos.map(([campo]) => `${campo} = ?`).join(', ');
-        const valores = campos.map(([, valor]) => valor);
-
-        const query = `UPDATE pedidos SET ${sets} WHERE id_pedido = ?`;
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [...valores, id]);
-        return resultado;
+        const data = Object.fromEntries(Object.entries(pedido).filter(([campo]) => permitidas.includes(campo)));
+        if (Object.keys(data).length === 0) return null;
+        return prisma.pedidos.update({ where: { id_pedido: id }, data });
     }
 
     // DELETE
-    async eliminar(id: string): Promise<ResultSetHeader> {
-        const query = 'DELETE FROM pedidos WHERE id_pedido = ?';
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [id]);
-        return resultado;
+    async eliminar(id: number) {
+        return prisma.pedidos.delete({ where: { id_pedido: id } });
     }
 }
 

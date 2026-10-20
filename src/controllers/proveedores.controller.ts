@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 // responde 409 (proveedor con productos asociados) o 400 en vez de un 500.
 // [Migración TS] Antes era proveedores.controller.mjs.
 import proveedorModel from '../models/proveedores.model.js';
+import { leerId, ID_INVALIDO } from '../utils/params.js';
 
 class ProveedorController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -14,7 +15,7 @@ class ProveedorController {
                 return;
             }
             const resultado = await proveedorModel.crear(req.body);
-            res.status(201).json({ mensaje: "Proveedor creado exitosamente", id_proveedor: resultado.insertId });
+            res.status(201).json({ mensaje: "Proveedor creado exitosamente", id_proveedor: resultado.id_proveedor });
         } catch (error) {
             console.error("Error al crear proveedor:", error);
             next(error);
@@ -33,7 +34,11 @@ class ProveedorController {
 
     async obtenerPorId(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const proveedor = await proveedorModel.obtenerPorId(id);
 
             if (!proveedor) {
@@ -50,13 +55,13 @@ class ProveedorController {
 
     async actualizar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
-            const resultado = await proveedorModel.actualizar(id, req.body);
-
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Proveedor no encontrado para actualizar." });
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
                 return;
             }
+            await proveedorModel.actualizar(id, req.body);
+
             res.status(200).json({ mensaje: "Proveedor actualizado exitosamente" });
         } catch (error) {
             console.error("Error al actualizar proveedor:", error);
@@ -66,13 +71,13 @@ class ProveedorController {
 
     async eliminar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
-            const resultado = await proveedorModel.eliminar(id);
-
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Proveedor no encontrado para eliminar." });
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
                 return;
             }
+            await proveedorModel.eliminar(id);
+
             res.status(200).json({ mensaje: "Proveedor eliminado exitosamente" });
         } catch (error) {
             console.error("Error al eliminar proveedor:", error);
@@ -82,7 +87,11 @@ class ProveedorController {
 
     async actualizarParcial(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const resultado = await proveedorModel.actualizarParcial(id, req.body);
 
             if (!resultado) {
@@ -90,10 +99,6 @@ class ProveedorController {
                 return;
             }
 
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Proveedor no encontrado." });
-                return;
-            }
 
             res.status(200).json({ mensaje: "Proveedor actualizado parcialmente" });
         } catch (error) {

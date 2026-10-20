@@ -1,108 +1,70 @@
-import type { ResultSetHeader, RowDataPacket } from 'mysql2';
-import pool from '../config/db.js';
-import type { ReglaFiltro } from '../types/filtros.js';
+import type { Prisma } from '../generated/prisma/client.js';
+import prisma from '../config/prisma.js';
 
-// [Migración TS] Model de empleados (antes empleados.model.mjs)
+// [TP5 - Migración a Prisma] Model de empleados (antes SQL a mano con mysql2)
 class EmpleadoModel {
     // CREATE
-    async crear(empleado: Record<string, any>): Promise<ResultSetHeader> {
+    async crear(empleado: Record<string, any>) {
         const { nombre, apellido, cargo } = empleado;
-        const query = 'INSERT INTO empleados (nombre, apellido, cargo) VALUES (?, ?, ?)';
-        // [CAMBIO TP4] Campos opcionales no enviados llegan como `undefined`
-        // y mysql2 no los acepta en execute(): se normalizan a null
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [nombre, apellido, cargo].map(v => v ?? null)
-        );
-        return resultado;
+        return prisma.empleados.create({ data: { nombre, apellido, cargo: cargo ?? null } });
     }
 
-    // READ (acepta filtrados opcionales: /api/empleados?nombre=...&cargo=...)
-    async obtenerTodos(filtros: Record<string, any> = {}): Promise<RowDataPacket[]> {
-        const mapaFiltros: Record<string, ReglaFiltro> = {
-            nombre:   { columna: 'nombre', like: true },
-            apellido: { columna: 'apellido', like: true },
-            cargo:    { columna: 'cargo', like: true }
-        };
-
-        const condiciones: string[] = [];
-        const valores: any[] = [];
-
-        for (const [parametro, regla] of Object.entries(mapaFiltros)) {
-            const valor = filtros[parametro];
-            if (valor === undefined || valor === '') continue;
-
-            if (regla.like) {
-                condiciones.push(`${regla.columna} LIKE ?`);
-                valores.push(`%${valor}%`);
-            } else {
-                const operador = regla.operador || '=';
-                condiciones.push(`${regla.columna} ${operador} ?`);
-                valores.push(valor);
-            }
-        }
-
-        let query = 'SELECT * FROM empleados';
-        if (condiciones.length > 0) query += ` WHERE ${condiciones.join(' AND ')}`;
-
-        const [filas] = await pool.query<RowDataPacket[]>(query, valores);
-        return filas;
+    // READ con filtros: /api/empleados?nombre=...&apellido=...&cargo=...
+    async obtenerTodos(filtros: Record<string, any> = {}) {
+        const where: Prisma.empleadosWhereInput = {};
+        if (filtros.nombre) where.nombre = { contains: String(filtros.nombre) };
+        if (filtros.apellido) where.apellido = { contains: String(filtros.apellido) };
+        if (filtros.cargo) where.cargo = { contains: String(filtros.cargo) };
+        return prisma.empleados.findMany({ where });
     }
 
-    // AGGREGATION (SUM + COUNT + GROUP BY): pedidos atendidos y vendido por empleado
-    async obtenerEstadisticas(): Promise<RowDataPacket[]> {
-        const query = `
-            SELECT e.id_empleado, e.nombre, e.apellido,
-                   COUNT(p.id_pedido) AS pedidos,
-                   IFNULL(SUM(p.total), 0) AS total_vendido
-            FROM empleados e
-            LEFT JOIN pedidos p ON e.id_empleado = p.id_empleado
-            GROUP BY e.id_empleado, e.nombre, e.apellido
-            ORDER BY total_vendido DESC
-        `;
-        const [filas] = await pool.query<RowDataPacket[]>(query);
-        return filas;
+    // AGGREGATION: pedidos atendidos y total vendido por cada empleado
+    //   _count → cantidad de pedidos | groupBy + _sum → SUM(total) GROUP BY id_empleado
+    async obtenerEstadisticas() {
+        const [empleados, totales] = await Promise.all([
+            prisma.empleados.findMany({
+                select: { id_empleado: true, nombre: true, apellido: true, _count: { select: { pedidos: true } } }
+            }),
+            prisma.pedidos.groupBy({ by: ['id_empleado'], _sum: { total: true } })
+        ]);
+
+        const vendidoPorEmpleado = new Map(totales.map(t => [t.id_empleado, Number(t._sum.total ?? 0)]));
+        return empleados
+            .map(e => ({
+                id_empleado: e.id_empleado,
+                nombre: e.nombre,
+                apellido: e.apellido,
+                pedidos: e._count.pedidos,
+                total_vendido: vendidoPorEmpleado.get(e.id_empleado) ?? 0
+            }))
+            .sort((a, b) => b.total_vendido - a.total_vendido);
     }
 
     // READ by ID
-    async obtenerPorId(id: string): Promise<RowDataPacket | undefined> {
-        const query = 'SELECT * FROM empleados WHERE id_empleado = ?';
-        const [filas] = await pool.execute<RowDataPacket[]>(query, [id]);
-        return filas[0];
+    async obtenerPorId(id: number) {
+        return prisma.empleados.findUnique({ where: { id_empleado: id } });
     }
 
-    // UPDATE
-    async actualizar(id: string, empleado: Record<string, any>): Promise<ResultSetHeader> {
+    // UPDATE (PUT)
+    async actualizar(id: number, empleado: Record<string, any>) {
         const { nombre, apellido, cargo } = empleado;
-        const query = 'UPDATE empleados SET nombre = ?, apellido = ?, cargo = ? WHERE id_empleado = ?';
-        // (misma normalización undefined → null que en crear)
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [nombre, apellido, cargo, id].map(v => v ?? null)
-        );
-        return resultado;
+        return prisma.empleados.update({
+            where: { id_empleado: id },
+            data: { nombre, apellido, cargo: cargo ?? null }
+        });
     }
 
-    // UPDATE PARCIAL (PATCH): actualiza solo los campos enviados
-    async actualizarParcial(id: string, empleado: Record<string, any>): Promise<ResultSetHeader | null> {
+    // UPDATE PARCIAL (PATCH)
+    async actualizarParcial(id: number, empleado: Record<string, any>) {
         const permitidas = ['nombre', 'apellido', 'cargo'];
-        const campos = Object.entries(empleado).filter(([campo]) => permitidas.includes(campo));
-
-        if (campos.length === 0) return null;
-
-        const sets = campos.map(([campo]) => `${campo} = ?`).join(', ');
-        const valores = campos.map(([, valor]) => valor);
-
-        const query = `UPDATE empleados SET ${sets} WHERE id_empleado = ?`;
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [...valores, id]);
-        return resultado;
+        const data = Object.fromEntries(Object.entries(empleado).filter(([campo]) => permitidas.includes(campo)));
+        if (Object.keys(data).length === 0) return null;
+        return prisma.empleados.update({ where: { id_empleado: id }, data });
     }
 
     // DELETE
-    async eliminar(id: string): Promise<ResultSetHeader> {
-        const query = 'DELETE FROM empleados WHERE id_empleado = ?';
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [id]);
-        return resultado;
+    async eliminar(id: number) {
+        return prisma.empleados.delete({ where: { id_empleado: id } });
     }
 }
 

@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 // responde 409 (FK con datos asociados) o 400 en vez de un 500 genérico.
 // [Migración TS] Antes era empleados.controller.mjs.
 import empleadoModel from '../models/empleados.model.js';
+import { leerId, ID_INVALIDO } from '../utils/params.js';
 
 class EmpleadoController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -16,7 +17,7 @@ class EmpleadoController {
             }
 
             const resultado = await empleadoModel.crear(req.body);
-            res.status(201).json({ mensaje: "Empleado creado exitosamente", id_empleado: resultado.insertId });
+            res.status(201).json({ mensaje: "Empleado creado exitosamente", id_empleado: resultado.id_empleado });
         } catch (error) {
             console.error("Error al crear empleado:", error);
             next(error);
@@ -35,7 +36,11 @@ class EmpleadoController {
 
     async obtenerPorId(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const empleado = await empleadoModel.obtenerPorId(id);
 
             if (!empleado) {
@@ -52,13 +57,13 @@ class EmpleadoController {
 
     async actualizar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
-            const resultado = await empleadoModel.actualizar(id, req.body);
-
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Empleado no encontrado." });
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
                 return;
             }
+            await empleadoModel.actualizar(id, req.body);
+
             res.status(200).json({ mensaje: "Empleado actualizado exitosamente" });
         } catch (error) {
             console.error("Error al actualizar empleado:", error);
@@ -68,13 +73,13 @@ class EmpleadoController {
 
     async eliminar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
-            const resultado = await empleadoModel.eliminar(id);
-
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Empleado no encontrado." });
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
                 return;
             }
+            await empleadoModel.eliminar(id);
+
             res.status(200).json({ mensaje: "Empleado eliminado exitosamente" });
         } catch (error) {
             console.error("Error al eliminar empleado:", error);
@@ -84,7 +89,11 @@ class EmpleadoController {
 
     async actualizarParcial(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const resultado = await empleadoModel.actualizarParcial(id, req.body);
 
             if (!resultado) {
@@ -92,10 +101,6 @@ class EmpleadoController {
                 return;
             }
 
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Empleado no encontrado." });
-                return;
-            }
 
             res.status(200).json({ mensaje: "Empleado actualizado parcialmente" });
         } catch (error) {

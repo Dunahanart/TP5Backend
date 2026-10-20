@@ -1,30 +1,32 @@
 import type { NextFunction, Request, Response } from 'express';
 
-// [Migración TS] Forma del error que emite mysql2 / express-json.
-// No viene tipado en las librerías, así que lo declaramos nosotros.
-interface ErrorMySQL extends Error {
-    code?: string;    // ej: 'ER_DUP_ENTRY', 'ER_ROW_IS_REFERENCED_2'
-    errno?: number;   // ej: 1062 (duplicado), 3819 (CHECK violado)
-    type?: string;    // ej: 'entity.parse.failed' (JSON malformado)
+// Forma del error que emiten Prisma y express.json.
+// No vienen tipados en las librerías, así que lo declaramos nosotros.
+interface ErrorBD extends Error {
+    code?: string;    // Prisma: 'P2002', 'P2025', 'P2003'...
+    type?: string;    // express.json: 'entity.parse.failed' (JSON malformado)
 }
 
 // ============================================================
-//  [ARCHIVO NUEVO - TP4] Manejador GLOBAL de errores (consigna 3.4)
+//  Manejador GLOBAL de errores (TP5 - consigna 2.5)
 //
 //  Se registra en app.ts DESPUÉS de todas las rutas. Recibe los errores
 //  que los controllers delegan con next(error) y los traduce en
-//  respuestas HTTP claras:
-//    * 1062 duplicado (DNI, UNIQUE pedido+producto)  → 409
-//    * FK con datos asociados (eliminar con detalles) → 409
-//    * 3819 CHECK violado (stock/precio negativo)    → 400
-//    * FK inexistente / JSON roto en el body         → 400
-//    * cualquier otra excepción                      → 500 genérico
-//  El error real se loguea en consola del servidor; jamás se expone al cliente.
+//  respuestas HTTP claras, SIN stack trace ni SQL crudo:
+//
+//    Prisma P2002 (valor único repetido: dni, cuit...)  → 409
+//    Prisma P2003 (clave foránea): al borrar            → 409
+//                                  al crear / editar    → 400
+//    Prisma P2025 (registro no encontrado)              → 404
+//    Prisma ValidationError (faltan / sobran campos)    → 400
+//    JSON malformado en el body                         → 400
+//    cualquier otra excepción                           → 500 genérico
+//
+//  El error real se loguea solo en el servidor; jamás se expone al cliente.
 // ============================================================
 class ErrorHandler {
-    manejar(err: ErrorMySQL, req: Request, res: Response, next: NextFunction): void {
-        // El error real se loguea en el servidor, jamás se devuelve al cliente
-        console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err.message);
+    manejar(err: ErrorBD, req: Request, res: Response, next: NextFunction): void {
+        console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err.code ?? err.name, '-', err.message.split('\n').pop());
 
         // Si la respuesta ya salió, dejamos que Express cierre la conexión
         if (res.headersSent) {
@@ -37,26 +39,26 @@ class ErrorHandler {
             return;
         }
 
-        // Errores de MySQL → códigos HTTP semánticos
+        // ---------- Errores de Prisma ----------
         switch (err.code) {
-            case 'ER_DUP_ENTRY':
+            case 'P2002':
                 res.status(409).json({ error: "Ya existe un registro con ese valor (dato duplicado)." });
                 return;
-            case 'ER_NO_REFERENCED_ROW_2':
-                res.status(400).json({ error: "Referencia inexistente: el ID indicado no existe." });
+            case 'P2003':
+                if (req.method === 'DELETE') {
+                    res.status(409).json({ error: "No se puede eliminar: el registro tiene datos asociados." });
+                } else {
+                    res.status(400).json({ error: "Referencia inexistente: el ID indicado no existe." });
+                }
                 return;
-            case 'ER_ROW_IS_REFERENCED_2':
-                res.status(409).json({ error: "No se puede eliminar: el registro tiene datos asociados." });
-                return;
-            case 'ER_CHECK_CONSTRAINT_VIOLATED':
-            case 'ER_CONSTRAINT_FAILED':
-                res.status(400).json({ error: "Valor no permitido por las restricciones de la base de datos." });
+            case 'P2025':
+                res.status(404).json({ error: "Registro no encontrado." });
                 return;
         }
 
-        // MariaDB informa el CHECK violado con estos números de error
-        if (err.errno === 3819 || err.errno === 4025) {
-            res.status(400).json({ error: "Valor no permitido por las restricciones de la base de datos." });
+        // Prisma rechaza la consulta antes de ejecutarla (campo faltante, tipo incorrecto)
+        if (err.name === 'PrismaClientValidationError') {
+            res.status(400).json({ error: "Datos inválidos: revisá los campos enviados." });
             return;
         }
 

@@ -1,110 +1,77 @@
-import type { ResultSetHeader, RowDataPacket } from 'mysql2';
-import pool from '../config/db.js';
-import type { ReglaFiltro } from '../types/filtros.js';
+import type { Prisma } from '../generated/prisma/client.js';
+import prisma from '../config/prisma.js';
 
-// [Migración TS] Model de productos (antes productos.model.mjs)
+// [TP5 - Migración a Prisma] Model de productos (antes SQL a mano con mysql2)
 class ProductoModel {
     // CREATE
-    async crear(producto: Record<string, any>): Promise<ResultSetHeader> {
+    async crear(producto: Record<string, any>) {
         const { nombre, descripcion, precio_unitario, stock, id_proveedor } = producto;
-        const query = 'INSERT INTO productos (nombre, descripcion, precio_unitario, stock, id_proveedor) VALUES (?, ?, ?, ?, ?)';
-        // [CAMBIO TP4] Campos opcionales no enviados llegan como `undefined`
-        // y mysql2 no los acepta en execute(): se normalizan a null
-        // (descripcion/id_proveedor son anulables en la BD)
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [nombre, descripcion, precio_unitario, stock, id_proveedor].map(v => v ?? null)
-        );
-        return resultado;
+        return prisma.productos.create({
+            // stock en `undefined` → Prisma usa el default de la BD (0)
+            data: { nombre, descripcion: descripcion ?? null, precio_unitario, stock, id_proveedor: id_proveedor ?? null }
+        });
     }
 
-    // READ (acepta filtrados opcionales: /api/productos?nombre=...&stock_min=10)
-    async obtenerTodos(filtros: Record<string, any> = {}): Promise<RowDataPacket[]> {
-        const mapaFiltros: Record<string, ReglaFiltro> = {
-            nombre:     { columna: 'nombre', like: true },
-            stock_min:  { columna: 'stock', operador: '>=' },
-            stock_max:  { columna: 'stock', operador: '<=' },
-            precio_min: { columna: 'precio_unitario', operador: '>=' },
-            proveedor:  { columna: 'id_proveedor' }
+    // READ con filtros: /api/productos?nombre=...&stock_min=10&stock_max=50&precio_min=1000&proveedor=2
+    //   gte = ">="  |  lte = "<="  |  contains = LIKE '%x%'
+    async obtenerTodos(filtros: Record<string, any> = {}) {
+        const where: Prisma.productosWhereInput = {};
+        if (filtros.nombre) where.nombre = { contains: String(filtros.nombre) };
+        if (filtros.proveedor) where.id_proveedor = Number(filtros.proveedor);
+
+        const stock: Prisma.IntFilter = {};
+        if (filtros.stock_min) stock.gte = Number(filtros.stock_min);
+        if (filtros.stock_max) stock.lte = Number(filtros.stock_max);
+        if (Object.keys(stock).length > 0) where.stock = stock;
+
+        if (filtros.precio_min) where.precio_unitario = { gte: Number(filtros.precio_min) };
+
+        return prisma.productos.findMany({ where });
+    }
+
+    // AGGREGATION: COUNT, SUM, AVG, MAX y MIN en una sola llamada a aggregate()
+    async obtenerEstadisticas() {
+        const r = await prisma.productos.aggregate({
+            _count: true,
+            _sum: { stock: true },
+            _avg: { precio_unitario: true },
+            _max: { precio_unitario: true },
+            _min: { precio_unitario: true }
+        });
+        return {
+            cantidad: r._count,
+            stock_total: r._sum.stock,
+            precio_promedio: r._avg.precio_unitario,
+            precio_maximo: r._max.precio_unitario,
+            precio_minimo: r._min.precio_unitario
         };
-
-        const condiciones: string[] = [];
-        const valores: any[] = [];
-
-        for (const [parametro, regla] of Object.entries(mapaFiltros)) {
-            const valor = filtros[parametro];
-            if (valor === undefined || valor === '') continue;
-
-            if (regla.like) {
-                condiciones.push(`${regla.columna} LIKE ?`);
-                valores.push(`%${valor}%`);
-            } else {
-                const operador = regla.operador || '=';
-                condiciones.push(`${regla.columna} ${operador} ?`);
-                valores.push(valor);
-            }
-        }
-
-        let query = 'SELECT * FROM productos';
-        if (condiciones.length > 0) query += ` WHERE ${condiciones.join(' AND ')}`;
-
-        const [filas] = await pool.query<RowDataPacket[]>(query, valores);
-        return filas;
-    }
-
-    // AGGREGATION: COUNT, SUM, AVG, MAX y MIN en una sola consulta
-    async obtenerEstadisticas(): Promise<RowDataPacket> {
-        const query = `
-            SELECT COUNT(*) AS cantidad,
-                   SUM(stock) AS stock_total,
-                   AVG(precio_unitario) AS precio_promedio,
-                   MAX(precio_unitario) AS precio_maximo,
-                   MIN(precio_unitario) AS precio_minimo
-            FROM productos
-        `;
-        const [filas] = await pool.query<RowDataPacket[]>(query);
-        return filas[0];
     }
 
     // READ by ID
-    async obtenerPorId(id: string): Promise<RowDataPacket | undefined> {
-        const query = 'SELECT * FROM productos WHERE id_producto = ?';
-        const [filas] = await pool.execute<RowDataPacket[]>(query, [id]);
-        return filas[0];
+    async obtenerPorId(id: number) {
+        return prisma.productos.findUnique({ where: { id_producto: id } });
     }
 
-    // UPDATE
-    async actualizar(id: string, producto: Record<string, any>): Promise<ResultSetHeader> {
+    // UPDATE (PUT)
+    async actualizar(id: number, producto: Record<string, any>) {
         const { nombre, descripcion, precio_unitario, stock, id_proveedor } = producto;
-        const query = 'UPDATE productos SET nombre = ?, descripcion = ?, precio_unitario = ?, stock = ?, id_proveedor = ? WHERE id_producto = ?';
-        // (misma normalización undefined → null que en crear)
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [nombre, descripcion, precio_unitario, stock, id_proveedor, id].map(v => v ?? null)
-        );
-        return resultado;
+        return prisma.productos.update({
+            where: { id_producto: id },
+            data: { nombre, descripcion: descripcion ?? null, precio_unitario, stock, id_proveedor: id_proveedor ?? null }
+        });
     }
 
-    // UPDATE PARCIAL (PATCH): actualiza solo los campos enviados
-    async actualizarParcial(id: string, producto: Record<string, any>): Promise<ResultSetHeader | null> {
+    // UPDATE PARCIAL (PATCH)
+    async actualizarParcial(id: number, producto: Record<string, any>) {
         const permitidas = ['nombre', 'descripcion', 'precio_unitario', 'stock', 'id_proveedor'];
-        const campos = Object.entries(producto).filter(([campo]) => permitidas.includes(campo));
-
-        if (campos.length === 0) return null;
-
-        const sets = campos.map(([campo]) => `${campo} = ?`).join(', ');
-        const valores = campos.map(([, valor]) => valor);
-
-        const query = `UPDATE productos SET ${sets} WHERE id_producto = ?`;
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [...valores, id]);
-        return resultado;
+        const data = Object.fromEntries(Object.entries(producto).filter(([campo]) => permitidas.includes(campo)));
+        if (Object.keys(data).length === 0) return null;
+        return prisma.productos.update({ where: { id_producto: id }, data });
     }
 
-    // DELETE
-    async eliminar(id: string): Promise<ResultSetHeader> {
-        const query = 'DELETE FROM productos WHERE id_producto = ?';
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [id]);
-        return resultado;
+    // DELETE (P2003 → 409 si el producto figura en algún detalle de pedido)
+    async eliminar(id: number) {
+        return prisma.productos.delete({ where: { id_producto: id } });
     }
 }
 

@@ -9,6 +9,7 @@ import type { NextFunction, Request, Response } from 'express';
 //  [Migración TS] Antes era productos.controller.mjs.
 // ============================================================
 import productoModel from '../models/productos.model.js';
+import { leerId, ID_INVALIDO } from '../utils/params.js';
 
 class ProductoController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -30,7 +31,7 @@ class ProductoController {
             }
 
             const resultado = await productoModel.crear(req.body);
-            res.status(201).json({ mensaje: "Producto creado exitosamente", id_producto: resultado.insertId });
+            res.status(201).json({ mensaje: "Producto creado exitosamente", id_producto: resultado.id_producto });
         } catch (error) {
             console.error("Error al crear producto:", error);
             next(error);
@@ -58,7 +59,11 @@ class ProductoController {
 
     async obtenerPorId(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const producto = await productoModel.obtenerPorId(id);
 
             if (!producto) {
@@ -75,7 +80,11 @@ class ProductoController {
 
     async actualizar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const { precio_unitario, stock } = req.body;
 
             if ((precio_unitario !== undefined && Number(precio_unitario) < 0) ||
@@ -84,11 +93,7 @@ class ProductoController {
                 return;
             }
 
-            const resultado = await productoModel.actualizar(id, req.body);
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Producto no encontrado." });
-                return;
-            }
+            await productoModel.actualizar(id, req.body);
             res.status(200).json({ mensaje: "Producto actualizado exitosamente" });
         } catch (error) {
             console.error("Error al actualizar producto:", error);
@@ -98,7 +103,11 @@ class ProductoController {
 
     async actualizarParcial(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const { precio_unitario, stock } = req.body;
 
             if ((precio_unitario !== undefined && Number(precio_unitario) < 0) ||
@@ -114,10 +123,6 @@ class ProductoController {
                 return;
             }
 
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Producto no encontrado." });
-                return;
-            }
 
             res.status(200).json({ mensaje: "Producto actualizado parcialmente" });
         } catch (error) {
@@ -128,12 +133,12 @@ class ProductoController {
 
     async eliminar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
-            const resultado = await productoModel.eliminar(id);
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Producto no encontrado." });
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
                 return;
             }
+            await productoModel.eliminar(id);
             res.status(200).json({ mensaje: "Producto eliminado exitosamente" });
         } catch (error) {
             console.error("Error al eliminar producto:", error);

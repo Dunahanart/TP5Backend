@@ -1,116 +1,71 @@
-import type { ResultSetHeader, RowDataPacket } from 'mysql2';
-import pool from '../config/db.js';
-import type { ReglaFiltro } from '../types/filtros.js';
+import type { Prisma } from '../generated/prisma/client.js';
+import prisma from '../config/prisma.js';
 
-// [Migración TS] Model de proveedores (antes proveedores.model.mjs)
+// [TP5 - Migración a Prisma] Model de proveedores (antes SQL a mano con mysql2)
 class ProveedorModel {
-    // POST: Crear proveedor en la BD
-    async crear(proveedor: Record<string, any>): Promise<ResultSetHeader> {
+    // POST: INSERT INTO proveedores ...
+    async crear(proveedor: Record<string, any>) {
         const { razon_social, cuit, telefono, email } = proveedor;
-
-        // Cumplimos con la seguridad exigida usando consultas parametrizadas (?) para evitar Inyección SQL
-        const query = 'INSERT INTO PROVEEDORES (razon_social, cuit, telefono, email) VALUES (?, ?, ?, ?)';
-
-        // Usamos execute en lugar de query cuando pasamos parámetros dinámicos
-        // [CAMBIO TP4] Campos opcionales no enviados llegan como `undefined`
-        // y mysql2 no los acepta en execute(): se normalizan a null
-        // (telefono/email/id_proveedor son anulables en la BD)
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [razon_social, cuit, telefono, email].map(v => v ?? null)
-        );
-        return resultado;
+        return prisma.proveedores.create({
+            data: { razon_social, cuit, telefono: telefono ?? null, email: email ?? null }
+        });
     }
 
-    // GET: Obtener todos los proveedores (acepta filtrados: /api/proveedores?razon_social=...)
-    async obtenerTodos(filtros: Record<string, any> = {}): Promise<RowDataPacket[]> {
-        const mapaFiltros: Record<string, ReglaFiltro> = {
-            razon_social: { columna: 'razon_social', like: true },
-            cuit:         { columna: 'cuit' },
-            email:        { columna: 'email', like: true }
-        };
-
-        const condiciones: string[] = [];
-        const valores: any[] = [];
-
-        for (const [parametro, regla] of Object.entries(mapaFiltros)) {
-            const valor = filtros[parametro];
-            if (valor === undefined || valor === '') continue;
-
-            if (regla.like) {
-                condiciones.push(`${regla.columna} LIKE ?`);
-                valores.push(`%${valor}%`);
-            } else {
-                const operador = regla.operador || '=';
-                condiciones.push(`${regla.columna} ${operador} ?`);
-                valores.push(valor);
-            }
-        }
-
-        let query = 'SELECT * FROM PROVEEDORES';
-        if (condiciones.length > 0) query += ` WHERE ${condiciones.join(' AND ')}`;
-
-        const [filas] = await pool.query<RowDataPacket[]>(query, valores);
-        return filas;
+    // GET con filtros: /api/proveedores?razon_social=...&cuit=...&email=...
+    async obtenerTodos(filtros: Record<string, any> = {}) {
+        const where: Prisma.proveedoresWhereInput = {};
+        if (filtros.razon_social) where.razon_social = { contains: String(filtros.razon_social) };
+        if (filtros.cuit) where.cuit = String(filtros.cuit);
+        if (filtros.email) where.email = { contains: String(filtros.email) };
+        return prisma.proveedores.findMany({ where });
     }
 
-    // AGGREGATION (COUNT + GROUP BY): cuántos productos tiene cada proveedor
-    async obtenerEstadisticas(): Promise<RowDataPacket[]> {
-        const query = `
-            SELECT pr.id_proveedor, pr.razon_social,
-                   COUNT(p.id_producto) AS productos,
-                   IFNULL(SUM(p.stock), 0) AS stock_total
-            FROM PROVEEDORES pr
-            LEFT JOIN productos p ON pr.id_proveedor = p.id_proveedor
-            GROUP BY pr.id_proveedor, pr.razon_social
-            ORDER BY productos DESC
-        `;
-        const [filas] = await pool.query<RowDataPacket[]>(query);
-        return filas;
+    // AGGREGATION: cuántos productos y cuánto stock tiene cada proveedor
+    //   _count  → COUNT(...) con la relación (el JOIN lo resuelve Prisma)
+    //   groupBy + _sum → SUM(stock) ... GROUP BY id_proveedor
+    async obtenerEstadisticas() {
+        const [proveedores, stocks] = await Promise.all([
+            prisma.proveedores.findMany({
+                select: { id_proveedor: true, razon_social: true, _count: { select: { productos: true } } },
+                orderBy: { productos: { _count: 'desc' } }
+            }),
+            prisma.productos.groupBy({ by: ['id_proveedor'], _sum: { stock: true } })
+        ]);
+
+        const stockPorProveedor = new Map(stocks.map(s => [s.id_proveedor, s._sum.stock ?? 0]));
+        return proveedores.map(p => ({
+            id_proveedor: p.id_proveedor,
+            razon_social: p.razon_social,
+            productos: p._count.productos,
+            stock_total: stockPorProveedor.get(p.id_proveedor) ?? 0
+        }));
     }
 
-    // GET: Obtener un proveedor por su ID
-    async obtenerPorId(id: string): Promise<RowDataPacket | undefined> {
-        const [filas] = await pool.execute<RowDataPacket[]>('SELECT * FROM PROVEEDORES WHERE id_proveedor = ?', [id]);
-        return filas[0];
+    // GET por id (null si no existe)
+    async obtenerPorId(id: number) {
+        return prisma.proveedores.findUnique({ where: { id_proveedor: id } });
     }
 
-    // PUT: Actualizar un proveedor existente
-    async actualizar(id: string, proveedor: Record<string, any>): Promise<ResultSetHeader> {
+    // PUT (P2025 si no existe → 404)
+    async actualizar(id: number, proveedor: Record<string, any>) {
         const { razon_social, cuit, telefono, email } = proveedor;
-
-        const query = 'UPDATE PROVEEDORES SET razon_social = ?, cuit = ?, telefono = ?, email = ? WHERE id_proveedor = ?';
-        // (misma normalización undefined → null que en crear)
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [razon_social, cuit, telefono, email, id].map(v => v ?? null)
-        );
-
-        return resultado;
+        return prisma.proveedores.update({
+            where: { id_proveedor: id },
+            data: { razon_social, cuit, telefono: telefono ?? null, email: email ?? null }
+        });
     }
 
-    // UPDATE PARCIAL (PATCH): actualiza solo los campos enviados
-    async actualizarParcial(id: string, proveedor: Record<string, any>): Promise<ResultSetHeader | null> {
+    // PATCH: solo los campos permitidos que llegaron
+    async actualizarParcial(id: number, proveedor: Record<string, any>) {
         const permitidas = ['razon_social', 'cuit', 'telefono', 'email'];
-        const campos = Object.entries(proveedor).filter(([campo]) => permitidas.includes(campo));
-
-        if (campos.length === 0) return null;
-
-        const sets = campos.map(([campo]) => `${campo} = ?`).join(', ');
-        const valores = campos.map(([, valor]) => valor);
-
-        const query = `UPDATE PROVEEDORES SET ${sets} WHERE id_proveedor = ?`;
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [...valores, id]);
-
-        return resultado;
+        const data = Object.fromEntries(Object.entries(proveedor).filter(([campo]) => permitidas.includes(campo)));
+        if (Object.keys(data).length === 0) return null;
+        return prisma.proveedores.update({ where: { id_proveedor: id }, data });
     }
 
-    // DELETE: Eliminar un proveedor
-    async eliminar(id: string): Promise<ResultSetHeader> {
-        const query = 'DELETE FROM PROVEEDORES WHERE id_proveedor = ?';
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [id]);
-
-        return resultado;
+    // DELETE
+    async eliminar(id: number) {
+        return prisma.proveedores.delete({ where: { id_proveedor: id } });
     }
 }
 

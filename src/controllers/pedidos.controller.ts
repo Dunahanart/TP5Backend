@@ -9,6 +9,7 @@ import type { NextFunction, Request, Response } from 'express';
 //  [Migración TS] Antes era pedidos.controller.mjs.
 // ============================================================
 import pedidoModel from '../models/pedidos.model.js';
+import { leerId, ID_INVALIDO } from '../utils/params.js';
 
 // [CORRECCION 4] Estados posibles del pedido (mismo ENUM que define la base
 // de datos). Si el cliente manda uno distinto → respondemos 400.
@@ -31,7 +32,7 @@ class PedidoController {
             }
 
             const resultado = await pedidoModel.crear(req.body);
-            res.status(201).json({ mensaje: "Pedido creado exitosamente", id_pedido: resultado.insertId });
+            res.status(201).json({ mensaje: "Pedido creado exitosamente", id_pedido: resultado.id_pedido });
         } catch (error) {
             console.error("Error al crear pedido:", error);
             next(error);
@@ -61,7 +62,11 @@ class PedidoController {
 
     async obtenerPorId(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const pedido = await pedidoModel.obtenerPorId(id);
 
             if (!pedido) {
@@ -78,7 +83,11 @@ class PedidoController {
 
     async actualizar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const { id_cliente, estado } = req.body;
 
             // Mantenemos la regla de negocio: un pedido no puede quedar huérfano de cliente
@@ -92,12 +101,8 @@ class PedidoController {
                 return;
             }
 
-            const resultado = await pedidoModel.actualizar(id, req.body);
+            await pedidoModel.actualizar(id, req.body);
 
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Pedido no encontrado para actualizar." });
-                return;
-            }
 
             res.status(200).json({ mensaje: "Pedido actualizado exitosamente" });
         } catch (error) {
@@ -108,7 +113,11 @@ class PedidoController {
 
     async actualizarParcial(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const { estado } = req.body;
 
             if (estado && !ESTADOS_PERMITIDOS.includes(estado)) {
@@ -123,10 +132,6 @@ class PedidoController {
                 return;
             }
 
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Pedido no encontrado." });
-                return;
-            }
 
             res.status(200).json({ mensaje: "Pedido actualizado parcialmente" });
         } catch (error) {
@@ -137,21 +142,21 @@ class PedidoController {
 
     async eliminar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
-            const resultado = await pedidoModel.eliminar(id);
-
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Pedido no encontrado para eliminar." });
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
                 return;
             }
+            await pedidoModel.eliminar(id);
+
 
             res.status(200).json({ mensaje: "Pedido eliminado exitosamente" });
         } catch (error) {
             console.error("Error al eliminar pedido:", error);
 
             // Lógica de negocio (manejo de clave foránea)
-            // Si el error es ER_ROW_IS_REFERENCED_2, significa que el pedido ya tiene detalles asociados
-            if (error instanceof Error && 'code' in error && error.code === 'ER_ROW_IS_REFERENCED_2') {
+            // Si el error es P2003 (clave foránea de Prisma), significa que el pedido ya tiene detalles asociados
+            if (error instanceof Error && 'code' in error && error.code === 'P2003') {
                 res.status(409).json({ error: "No se puede eliminar el pedido porque tiene productos asociados en sus detalles." });
                 return;
             }

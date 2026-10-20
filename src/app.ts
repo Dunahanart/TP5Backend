@@ -1,7 +1,6 @@
 import morgan from 'morgan';
 import express, { type NextFunction, type Request, type Response } from 'express';
-import type { RowDataPacket } from 'mysql2';
-import pool from './config/db.js';
+import prisma from './config/prisma.js';
 // [ARCHIVO NUEVO TP4] Manejador global de errores - ver comentario al registrarlo más abajo
 import errorHandler from './middlewares/errorHandler.middleware.js';
 
@@ -20,9 +19,11 @@ const app = express();
 app.use(morgan('combined'));
 app.use(express.json());
 
+// [TP5] Ping a la base de datos con SQL puro ($queryRaw).
+// Sirve para comprobar que la conexión de Prisma funciona.
 app.get('/api/ping', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const [result] = await pool.query<RowDataPacket[]>('SELECT "Conexion exitosa a MySQL Distribuidora" AS mensaje');
+        const result = await prisma.$queryRaw<{ mensaje: string }[]>`SELECT 'Conexion exitosa a MySQL Distribuidora' AS mensaje`;
         res.status(200).json(result[0]);
     } catch (error) {
         next(error);
@@ -42,7 +43,7 @@ app.use('/api/detalles', detallesPedidoRoutes);
 //  [CAMBIO TP4] Manejador global de errores: SIEMPRE al final, después de
 //  todas las rutas. Los controllers que detectan un error de base de datos
 //  llaman next(error) y el error cae acá: el errorHandler responde
-//  409 (duplicados / claves foráneas), 400 (CHECK violado, JSON roto)
+//  409 (duplicados / claves foráneas), 404 (no existe), 400 (datos inválidos)
 //  o 500 genérico, con el error real logueado solo en el servidor.
 // ============================================================
 app.use(errorHandler.manejar);

@@ -1,103 +1,74 @@
-import type { ResultSetHeader, RowDataPacket } from 'mysql2';
-import pool from '../config/db.js';
-import type { ReglaFiltro } from '../types/filtros.js';
+import type { Prisma } from '../generated/prisma/client.js';
+import prisma from '../config/prisma.js';
 
-// [Migración TS] Model de clientes (antes clientes.model.mjs)
+// ============================================================
+//  [TP5 - Migración a Prisma] Model de clientes
+//  Antes: SQL escrito a mano con mysql2 (pool.execute / pool.query).
+//  Ahora: Prisma Client. Prisma arma el SQL parametrizado por nosotros.
+//  Los errores (dni duplicado, id inexistente) los lanza Prisma y los
+//  traduce el errorHandler global a 409 / 404.
+// ============================================================
 class ClienteModel {
-    // CREATE
-    async crear(cliente: Record<string, any>): Promise<ResultSetHeader> {
+    // CREATE  →  INSERT INTO clientes ...
+    async crear(cliente: Record<string, any>) {
         const { nombre, apellido, dni, direccion, telefono } = cliente;
-        const query = 'INSERT INTO clientes (nombre, apellido, dni, direccion, telefono) VALUES (?, ?, ?, ?, ?)';
-        // [CAMBIO TP4] Campos opcionales no enviados llegan como `undefined`
-        // y mysql2 no los acepta en execute(): se normalizan a null
-        // (las columnas direccion/telefono son anulables en la BD)
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [nombre, apellido, dni, direccion, telefono].map(v => v ?? null)
-        );
-        return resultado;
+        return prisma.clientes.create({
+            data: { nombre, apellido, dni, direccion: direccion ?? null, telefono: telefono ?? null }
+        });
     }
 
-    // READ (acepta filtrados opcionales: /api/clientes?dni=...&nombre=...)
-    async obtenerTodos(filtros: Record<string, any> = {}): Promise<RowDataPacket[]> {
-        // Whitelist: parámetros de la URL → columnas reales de la tabla
-        const mapaFiltros: Record<string, ReglaFiltro> = {
-            dni:      { columna: 'dni' },                  // coincidencia exacta
-            nombre:   { columna: 'nombre', like: true },   // búsqueda parcial
-            apellido: { columna: 'apellido', like: true }
-        };
+    // READ con filtros opcionales: /api/clientes?dni=...&nombre=...
+    // Antes: armábamos el WHERE concatenando condiciones a mano.
+    // Ahora: objeto `where`; solo se agregan los filtros que llegaron.
+    async obtenerTodos(filtros: Record<string, any> = {}) {
+        const where: Prisma.clientesWhereInput = {};
+        if (filtros.dni) where.dni = String(filtros.dni);                           // exacto
+        if (filtros.nombre) where.nombre = { contains: String(filtros.nombre) };    // LIKE %x%
+        if (filtros.apellido) where.apellido = { contains: String(filtros.apellido) };
 
-        const condiciones: string[] = [];
-        const valores: any[] = [];
-
-        for (const [parametro, regla] of Object.entries(mapaFiltros)) {
-            const valor = filtros[parametro];
-            if (valor === undefined || valor === '') continue;
-
-            if (regla.like) {
-                condiciones.push(`${regla.columna} LIKE ?`);
-                valores.push(`%${valor}%`);
-            } else {
-                const operador = regla.operador || '=';
-                condiciones.push(`${regla.columna} ${operador} ?`);
-                valores.push(valor);
-            }
-        }
-
-        let query = 'SELECT * FROM clientes';
-        if (condiciones.length > 0) query += ` WHERE ${condiciones.join(' AND ')}`;
-
-        const [filas] = await pool.query<RowDataPacket[]>(query, valores);
-        return filas;
+        return prisma.clientes.findMany({ where });
     }
 
-    // AGGREGATION: resumen de clientes (COUNT)
-    async obtenerEstadisticas(): Promise<RowDataPacket> {
-        const query = 'SELECT COUNT(*) AS cantidad, COUNT(telefono) AS con_telefono FROM clientes';
-        const [filas] = await pool.query<RowDataPacket[]>(query);
-        return filas[0];
+    // AGGREGATION: COUNT(*) y COUNT(telefono)
+    async obtenerEstadisticas() {
+        const [cantidad, conTelefono] = await Promise.all([
+            prisma.clientes.count(),
+            prisma.clientes.count({ where: { telefono: { not: null } } })
+        ]);
+        return { cantidad, con_telefono: conTelefono };
     }
 
-    // READ by ID
-    async obtenerPorId(id: string): Promise<RowDataPacket | undefined> {
-        const query = 'SELECT * FROM clientes WHERE id_cliente = ?';
-        const [filas] = await pool.execute<RowDataPacket[]>(query, [id]);
-        return filas[0];
+    // READ by ID  →  devuelve null si no existe
+    async obtenerPorId(id: number) {
+        return prisma.clientes.findUnique({ where: { id_cliente: id } });
     }
 
-    // UPDATE
-    async actualizar(id: string, cliente: Record<string, any>): Promise<ResultSetHeader> {
+    // UPDATE (PUT): reemplaza todos los campos.
+    // Si el id no existe, Prisma lanza el error P2025 (→ 404 en el errorHandler).
+    async actualizar(id: number, cliente: Record<string, any>) {
         const { nombre, apellido, dni, direccion, telefono } = cliente;
-        const query = 'UPDATE clientes SET nombre = ?, apellido = ?, dni = ?, direccion = ?, telefono = ? WHERE id_cliente = ?';
-        // (misma normalización undefined → null que en crear)
-        const [resultado] = await pool.execute<ResultSetHeader>(
-            query,
-            [nombre, apellido, dni, direccion, telefono, id].map(v => v ?? null)
-        );
-        return resultado;
+        return prisma.clientes.update({
+            where: { id_cliente: id },
+            data: { nombre, apellido, dni, direccion: direccion ?? null, telefono: telefono ?? null }
+        });
     }
 
-    // UPDATE PARCIAL (PATCH): actualiza solo los campos enviados
-    async actualizarParcial(id: string, cliente: Record<string, any>): Promise<ResultSetHeader | null> {
+    // UPDATE PARCIAL (PATCH): solo los campos permitidos que llegaron
+    async actualizarParcial(id: number, cliente: Record<string, any>) {
         const permitidas = ['nombre', 'apellido', 'dni', 'direccion', 'telefono'];
-        const campos = Object.entries(cliente).filter(([campo]) => permitidas.includes(campo));
+        const data = Object.fromEntries(
+            Object.entries(cliente).filter(([campo]) => permitidas.includes(campo))
+        );
 
         // Si no llega ningún campo válido, no hay nada que modificar
-        if (campos.length === 0) return null;
+        if (Object.keys(data).length === 0) return null;
 
-        const sets = campos.map(([campo]) => `${campo} = ?`).join(', ');
-        const valores = campos.map(([, valor]) => valor);
-
-        const query = `UPDATE clientes SET ${sets} WHERE id_cliente = ?`;
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [...valores, id]);
-        return resultado;
+        return prisma.clientes.update({ where: { id_cliente: id }, data });
     }
 
-    // DELETE
-    async eliminar(id: string): Promise<ResultSetHeader> {
-        const query = 'DELETE FROM clientes WHERE id_cliente = ?';
-        const [resultado] = await pool.execute<ResultSetHeader>(query, [id]);
-        return resultado;
+    // DELETE (P2025 si no existe, P2003 si tiene pedidos asociados)
+    async eliminar(id: number) {
+        return prisma.clientes.delete({ where: { id_cliente: id } });
     }
 }
 

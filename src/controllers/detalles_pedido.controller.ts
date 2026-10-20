@@ -12,6 +12,7 @@ import type { NextFunction, Request, Response } from 'express';
 // ============================================================
 import detallePedidoModel from '../models/detalles_pedido.model.js';
 import productoModel from '../models/productos.model.js';
+import { leerId, ID_INVALIDO } from '../utils/params.js';
 
 class DetallePedidoController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -31,7 +32,7 @@ class DetallePedidoController {
             // [CORRECCION 2] Precio histórico: lo define el SERVIDOR al momento de la venta,
             // tomando el precio vigente del producto. Así nadie puede alterarlo
             // desde el cliente y el subtotal queda consistente.
-            const producto = await productoModel.obtenerPorId(id_producto);
+            const producto = await productoModel.obtenerPorId(Number(id_producto));
             if (!producto) {
                 res.status(404).json({ error: "Producto no encontrado." });
                 return;
@@ -50,7 +51,7 @@ class DetallePedidoController {
 
             res.status(201).json({
                 mensaje: "Detalle agregado al pedido exitosamente",
-                id_detalle: resultado.insertId,
+                id_detalle: resultado.id_detalle,
                 precio_unitario,
                 subtotal
             });
@@ -63,7 +64,11 @@ class DetallePedidoController {
     async obtenerPorPedido(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             // En este caso, el ID del pedido viene por la URL (ej: /api/detalles/pedido/1)
-            const id_pedido = String(req.params.id_pedido);   // Express 5 tipa params como string | string[]
+            const id_pedido = leerId(req.params.id_pedido);
+            if (id_pedido === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const detalles = await detallePedidoModel.obtenerPorPedido(id_pedido, req.query);
 
             res.status(200).json(detalles);
@@ -86,7 +91,11 @@ class DetallePedidoController {
 
     async actualizarParcial(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = String(req.params.id);   // Express 5 tipa params como string | string[]
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
             const resultado = await detallePedidoModel.actualizarParcial(id, req.body);
 
             if (!resultado) {
@@ -94,10 +103,6 @@ class DetallePedidoController {
                 return;
             }
 
-            if (resultado.affectedRows === 0) {
-                res.status(404).json({ error: "Detalle no encontrado." });
-                return;
-            }
 
             res.status(200).json({ mensaje: "Detalle actualizado parcialmente" });
         } catch (error) {
