@@ -11,6 +11,7 @@ import empleadosRoutes from './routes/empleados.routes.js';
 import companiasRoutes from './routes/companias.routes.js';
 import pedidosRoutes from './routes/pedidos.routes.js';
 import detallesPedidoRoutes from './routes/detalles_pedido.routes.js';
+import informeRoutes from './routes/informe.routes.js';
 
 // [Migración TS] La app vive en app.ts (exportada) y el arranque (app.listen)
 // vive en index.ts, igual que el ejemplo de la cátedra.
@@ -38,6 +39,8 @@ app.use('/api/empleados', empleadosRoutes);
 app.use('/api/companias', companiasRoutes);
 app.use('/api/pedidos', pedidosRoutes);
 app.use('/api/detalles', detallesPedidoRoutes);
+// [TP5 - Consigna 3.4] Ruta del informe generado con SQL puro ($queryRaw)
+app.use('/api/informe', informeRoutes);
 
 // ============================================================
 //  [CAMBIO TP4] Manejador global de errores: SIEMPRE al final, después de

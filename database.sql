@@ -1,8 +1,9 @@
 -- ============================================================
---  TP N° 4 - API REST: Distribuidora
+--  TP N° 5 - TypeScript + ORM Prisma: Distribuidora
 --  Script para recrear la base de datos `distribuidora_ipap`
 --
---  Incluye las 5 correcciones del profesor.
+--  Incluye las 5 correcciones del profesor (TP4) y las tablas
+--  agregadas en TP5 (usuario).
 --  Buscá por "CORRECCION" para encontrar cada una:
 --    CORRECCION 1: CREATE DATABASE + USE (el script se ejecuta solo)
 --    CORRECCION 2: precio_unitario histórico en detalles_pedido

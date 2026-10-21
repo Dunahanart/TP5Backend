@@ -1,0 +1,618 @@
+{
+  "_info": {
+    "titulo": "Casos de prueba – TP5 Backend Distribuidora",
+    "base_url": "http://localhost:3000",
+    "nota": "Importar en Postman o Thunder Client. Los IDs en las rutas asumen que la BD fue cargada con database.sql."
+  },
+
+  "ping": [
+    {
+      "nombre": "Ping – conexión a la BD",
+      "metodo": "GET",
+      "url": "/api/ping",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "body": { "mensaje": "Conexion exitosa a MySQL Distribuidora" } }
+    }
+  ],
+
+  "clientes": [
+    {
+      "nombre": "Crear cliente OK",
+      "metodo": "POST",
+      "url": "/api/clientes",
+      "body": { "nombre": "Laura", "apellido": "Gómez", "dni": "41000001", "direccion": "Av. San Martín 100", "telefono": "2944-000001" },
+      "respuesta_esperada": { "status": 201, "body": { "mensaje": "Cliente creado exitosamente" } }
+    },
+    {
+      "nombre": "Crear cliente – faltan campos obligatorios",
+      "metodo": "POST",
+      "url": "/api/clientes",
+      "body": { "nombre": "Laura" },
+      "respuesta_esperada": { "status": 400, "body": { "error": "El nombre, apellido y DNI son campos obligatorios." } }
+    },
+    {
+      "nombre": "Crear cliente – DNI duplicado",
+      "metodo": "POST",
+      "url": "/api/clientes",
+      "body": { "nombre": "Otro", "apellido": "Cliente", "dni": "30123456" },
+      "respuesta_esperada": { "status": 409, "body": { "error": "Ya existe un registro con ese valor (dato duplicado)." } }
+    },
+    {
+      "nombre": "Listar todos los clientes",
+      "metodo": "GET",
+      "url": "/api/clientes",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar clientes – filtro por nombre",
+      "metodo": "GET",
+      "url": "/api/clientes?nombre=Juan",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar clientes – filtro por DNI exacto",
+      "metodo": "GET",
+      "url": "/api/clientes?dni=30123456",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Estadísticas de clientes (COUNT / COUNT con teléfono)",
+      "metodo": "GET",
+      "url": "/api/clientes/estadisticas",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "campos": ["cantidad", "con_telefono"] }
+    },
+    {
+      "nombre": "Obtener cliente por ID existente",
+      "metodo": "GET",
+      "url": "/api/clientes/1",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Obtener cliente – ID inexistente",
+      "metodo": "GET",
+      "url": "/api/clientes/9999",
+      "body": null,
+      "respuesta_esperada": { "status": 404, "body": { "error": "Cliente no encontrado." } }
+    },
+    {
+      "nombre": "Obtener cliente – ID inválido (texto)",
+      "metodo": "GET",
+      "url": "/api/clientes/abc",
+      "body": null,
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Actualizar cliente (PUT)",
+      "metodo": "PUT",
+      "url": "/api/clientes/1",
+      "body": { "nombre": "Juan Carlos", "apellido": "Del Castillo", "dni": "30123456", "direccion": "Bariloche", "telefono": "2944-999999" },
+      "respuesta_esperada": { "status": 200, "body": { "mensaje": "Cliente actualizado exitosamente" } }
+    },
+    {
+      "nombre": "Actualizar cliente parcial (PATCH)",
+      "metodo": "PATCH",
+      "url": "/api/clientes/1",
+      "body": { "telefono": "2944-111111" },
+      "respuesta_esperada": { "status": 200, "body": { "mensaje": "Cliente actualizado parcialmente" } }
+    },
+    {
+      "nombre": "Actualizar cliente parcial – sin campos válidos",
+      "metodo": "PATCH",
+      "url": "/api/clientes/1",
+      "body": { "campo_inexistente": "valor" },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Eliminar cliente – tiene pedidos asociados",
+      "metodo": "DELETE",
+      "url": "/api/clientes/1",
+      "body": null,
+      "respuesta_esperada": { "status": 409, "body": { "error": "No se puede eliminar: el registro tiene datos asociados." } }
+    }
+  ],
+
+  "proveedores": [
+    {
+      "nombre": "Crear proveedor OK",
+      "metodo": "POST",
+      "url": "/api/proveedores",
+      "body": { "razon_social": "Nuevo Proveedor SRL", "cuit": "30-99999999-9", "telefono": "2944-777777", "email": "nuevo@proveedor.com" },
+      "respuesta_esperada": { "status": 201 }
+    },
+    {
+      "nombre": "Crear proveedor – CUIT duplicado",
+      "metodo": "POST",
+      "url": "/api/proveedores",
+      "body": { "razon_social": "Otro", "cuit": "30-87654321-0" },
+      "respuesta_esperada": { "status": 409 }
+    },
+    {
+      "nombre": "Listar proveedores",
+      "metodo": "GET",
+      "url": "/api/proveedores",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar proveedores – filtro por razón social",
+      "metodo": "GET",
+      "url": "/api/proveedores?razon_social=Mayorista",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Estadísticas de proveedores (productos y stock por proveedor)",
+      "metodo": "GET",
+      "url": "/api/proveedores/estadisticas",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "campos": ["id_proveedor", "razon_social", "productos", "stock_total"] }
+    },
+    {
+      "nombre": "Obtener proveedor por ID",
+      "metodo": "GET",
+      "url": "/api/proveedores/1",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Obtener proveedor – ID inexistente",
+      "metodo": "GET",
+      "url": "/api/proveedores/9999",
+      "body": null,
+      "respuesta_esperada": { "status": 404 }
+    },
+    {
+      "nombre": "Actualizar proveedor (PUT)",
+      "metodo": "PUT",
+      "url": "/api/proveedores/1",
+      "body": { "razon_social": "Mayorista Bariloche SRL", "cuit": "30-87654321-0", "telefono": "2944-654321", "email": "nuevo@mayoristabrc.com" },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Actualizar proveedor parcial (PATCH)",
+      "metodo": "PATCH",
+      "url": "/api/proveedores/1",
+      "body": { "email": "contacto@mayoristabrc.com" },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Eliminar proveedor – tiene productos asociados",
+      "metodo": "DELETE",
+      "url": "/api/proveedores/1",
+      "body": null,
+      "respuesta_esperada": { "status": 409 }
+    }
+  ],
+
+  "productos": [
+    {
+      "nombre": "Crear producto OK",
+      "metodo": "POST",
+      "url": "/api/productos",
+      "body": { "nombre": "Jugo Tang 1L", "descripcion": "Jugo sabor naranja", "precio_unitario": 980.00, "stock": 50, "id_proveedor": 1 },
+      "respuesta_esperada": { "status": 201 }
+    },
+    {
+      "nombre": "Crear producto – faltan campos obligatorios",
+      "metodo": "POST",
+      "url": "/api/productos",
+      "body": { "descripcion": "Sin nombre ni precio" },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Listar productos",
+      "metodo": "GET",
+      "url": "/api/productos",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar productos – filtro por nombre",
+      "metodo": "GET",
+      "url": "/api/productos?nombre=Coca",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar productos – filtro stock_min y stock_max",
+      "metodo": "GET",
+      "url": "/api/productos?stock_min=1&stock_max=20",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar productos – filtro precio_min",
+      "metodo": "GET",
+      "url": "/api/productos?precio_min=2000",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar productos – filtro por proveedor",
+      "metodo": "GET",
+      "url": "/api/productos?proveedor=1",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Estadísticas de productos (COUNT, SUM stock, AVG/MAX/MIN precio)",
+      "metodo": "GET",
+      "url": "/api/productos/estadisticas",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "campos": ["cantidad", "stock_total", "precio_promedio", "precio_maximo", "precio_minimo"] }
+    },
+    {
+      "nombre": "Obtener producto por ID",
+      "metodo": "GET",
+      "url": "/api/productos/1",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Actualizar producto (PUT)",
+      "metodo": "PUT",
+      "url": "/api/productos/1",
+      "body": { "nombre": "Coca Cola 2.25L", "precio_unitario": 2600.00, "stock": 95, "id_proveedor": 2 },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Actualizar producto parcial – solo stock (PATCH)",
+      "metodo": "PATCH",
+      "url": "/api/productos/1",
+      "body": { "stock": 100 },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Eliminar producto – tiene detalles asociados",
+      "metodo": "DELETE",
+      "url": "/api/productos/1",
+      "body": null,
+      "respuesta_esperada": { "status": 409 }
+    }
+  ],
+
+  "empleados": [
+    {
+      "nombre": "Crear empleado OK",
+      "metodo": "POST",
+      "url": "/api/empleados",
+      "body": { "nombre": "Sofía", "apellido": "Ríos", "cargo": "Administrativa" },
+      "respuesta_esperada": { "status": 201 }
+    },
+    {
+      "nombre": "Crear empleado – faltan campos obligatorios",
+      "metodo": "POST",
+      "url": "/api/empleados",
+      "body": { "cargo": "Repartidor" },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Listar empleados",
+      "metodo": "GET",
+      "url": "/api/empleados",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar empleados – filtro por cargo",
+      "metodo": "GET",
+      "url": "/api/empleados?cargo=Vendedor",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Estadísticas de empleados (pedidos y total vendido por empleado)",
+      "metodo": "GET",
+      "url": "/api/empleados/estadisticas",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "campos": ["id_empleado", "nombre", "apellido", "pedidos", "total_vendido"] }
+    },
+    {
+      "nombre": "Obtener empleado por ID",
+      "metodo": "GET",
+      "url": "/api/empleados/1",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Obtener empleado – ID inexistente",
+      "metodo": "GET",
+      "url": "/api/empleados/9999",
+      "body": null,
+      "respuesta_esperada": { "status": 404 }
+    },
+    {
+      "nombre": "Actualizar empleado (PUT)",
+      "metodo": "PUT",
+      "url": "/api/empleados/1",
+      "body": { "nombre": "Carlos", "apellido": "Giménez", "cargo": "Jefe de Logística" },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Actualizar empleado parcial (PATCH)",
+      "metodo": "PATCH",
+      "url": "/api/empleados/1",
+      "body": { "cargo": "Supervisor de Logística" },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Eliminar empleado – ID inexistente",
+      "metodo": "DELETE",
+      "url": "/api/empleados/9999",
+      "body": null,
+      "respuesta_esperada": { "status": 404 }
+    }
+  ],
+
+  "companias_envio": [
+    {
+      "nombre": "Crear compañía OK",
+      "metodo": "POST",
+      "url": "/api/companias",
+      "body": { "nombre": "DHL Argentina", "telefono": "0810-345-0000" },
+      "respuesta_esperada": { "status": 201 }
+    },
+    {
+      "nombre": "Crear compañía – falta campo obligatorio",
+      "metodo": "POST",
+      "url": "/api/companias",
+      "body": { "telefono": "0810-345-0000" },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Listar compañías",
+      "metodo": "GET",
+      "url": "/api/companias",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar compañías – filtro por nombre",
+      "metodo": "GET",
+      "url": "/api/companias?nombre=Andreani",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Estadísticas de compañías (pedidos enviados por compañía)",
+      "metodo": "GET",
+      "url": "/api/companias/estadisticas",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "campos": ["id_compania", "nombre", "pedidos"] }
+    },
+    {
+      "nombre": "Obtener compañía por ID",
+      "metodo": "GET",
+      "url": "/api/companias/1",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Actualizar compañía (PUT)",
+      "metodo": "PUT",
+      "url": "/api/companias/1",
+      "body": { "nombre": "Andreani Logística", "telefono": "0810-122-1122" },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Actualizar compañía parcial (PATCH)",
+      "metodo": "PATCH",
+      "url": "/api/companias/1",
+      "body": { "telefono": "0810-000-0001" },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Eliminar compañía – tiene pedidos asociados",
+      "metodo": "DELETE",
+      "url": "/api/companias/1",
+      "body": null,
+      "respuesta_esperada": { "status": 409 }
+    }
+  ],
+
+  "pedidos": [
+    {
+      "nombre": "Crear pedido OK (mínimo)",
+      "metodo": "POST",
+      "url": "/api/pedidos",
+      "body": { "id_cliente": 1, "id_empleado": 1, "id_compania": 1 },
+      "respuesta_esperada": { "status": 201 }
+    },
+    {
+      "nombre": "Crear pedido con estado",
+      "metodo": "POST",
+      "url": "/api/pedidos",
+      "body": { "id_cliente": 2, "id_empleado": 2, "id_compania": 2, "estado": "enviado", "total": 5000 },
+      "respuesta_esperada": { "status": 201 }
+    },
+    {
+      "nombre": "Crear pedido – cliente inexistente",
+      "metodo": "POST",
+      "url": "/api/pedidos",
+      "body": { "id_cliente": 9999 },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Listar todos los pedidos (con JOIN a clientes, empleados, compañía)",
+      "metodo": "GET",
+      "url": "/api/pedidos",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar pedidos – filtro por estado",
+      "metodo": "GET",
+      "url": "/api/pedidos?estado=pendiente",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar pedidos – filtro por nombre de cliente",
+      "metodo": "GET",
+      "url": "/api/pedidos?cliente=Juan",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar pedidos – filtro por rango de fecha",
+      "metodo": "GET",
+      "url": "/api/pedidos?desde=2026-09-01&hasta=2026-10-01",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Estadísticas de pedidos (COUNT, SUM, AVG, MAX, MIN)",
+      "metodo": "GET",
+      "url": "/api/pedidos/estadisticas",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "campos": ["cantidad", "total", "promedio", "maximo", "minimo"] }
+    },
+    {
+      "nombre": "Totales por cliente (SUM + COUNT + GROUP BY)",
+      "metodo": "GET",
+      "url": "/api/pedidos/totales-por-cliente",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "campos": ["id_cliente", "nombre", "apellido", "pedidos", "total_gastado"] }
+    },
+    {
+      "nombre": "Obtener pedido por ID (con JOIN)",
+      "metodo": "GET",
+      "url": "/api/pedidos/1",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Obtener pedido – ID inexistente",
+      "metodo": "GET",
+      "url": "/api/pedidos/9999",
+      "body": null,
+      "respuesta_esperada": { "status": 404 }
+    },
+    {
+      "nombre": "Actualizar pedido (PUT) – cambiar estado",
+      "metodo": "PUT",
+      "url": "/api/pedidos/1",
+      "body": { "id_cliente": 1, "id_empleado": 1, "id_compania": 1, "total": 8601.00, "estado": "entregado" },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Actualizar pedido parcial (PATCH) – solo estado",
+      "metodo": "PATCH",
+      "url": "/api/pedidos/2",
+      "body": { "estado": "entregado" },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Actualizar pedido – estado inválido",
+      "metodo": "PATCH",
+      "url": "/api/pedidos/1",
+      "body": { "estado": "inexistente" },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Eliminar pedido por ID",
+      "metodo": "DELETE",
+      "url": "/api/pedidos/7",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    }
+  ],
+
+  "detalles_pedido": [
+    {
+      "nombre": "Agregar detalle a pedido (precio lo calcula el servidor)",
+      "metodo": "POST",
+      "url": "/api/detalles",
+      "body": { "id_pedido": 1, "id_producto": 2, "cantidad": 3 },
+      "respuesta_esperada": { "status": 201, "campos": ["id_detalle", "precio_unitario", "subtotal"] }
+    },
+    {
+      "nombre": "Agregar detalle – producto ya existe en ese pedido",
+      "metodo": "POST",
+      "url": "/api/detalles",
+      "body": { "id_pedido": 1, "id_producto": 1, "cantidad": 1 },
+      "respuesta_esperada": { "status": 409 }
+    },
+    {
+      "nombre": "Agregar detalle – producto inexistente",
+      "metodo": "POST",
+      "url": "/api/detalles",
+      "body": { "id_pedido": 1, "id_producto": 9999, "cantidad": 1 },
+      "respuesta_esperada": { "status": 404, "body": { "error": "Producto no encontrado." } }
+    },
+    {
+      "nombre": "Agregar detalle – cantidad cero",
+      "metodo": "POST",
+      "url": "/api/detalles",
+      "body": { "id_pedido": 1, "id_producto": 3, "cantidad": 0 },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Agregar detalle – faltan campos",
+      "metodo": "POST",
+      "url": "/api/detalles",
+      "body": { "id_pedido": 1 },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Listar detalles de un pedido (con JOIN a productos)",
+      "metodo": "GET",
+      "url": "/api/detalles/pedido/1",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Listar detalles de un pedido – filtro por producto",
+      "metodo": "GET",
+      "url": "/api/detalles/pedido/1?producto=1",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Productos más vendidos (SUM cantidad + GROUP BY)",
+      "metodo": "GET",
+      "url": "/api/detalles/mas-vendidos",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "campos": ["id_producto", "nombre", "unidades_vendidas", "facturado"] }
+    },
+    {
+      "nombre": "Actualizar detalle parcial (PATCH) – cambiar cantidad",
+      "metodo": "PATCH",
+      "url": "/api/detalles/1",
+      "body": { "cantidad": 5, "subtotal": 12502.50 },
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Actualizar detalle – sin campos válidos",
+      "metodo": "PATCH",
+      "url": "/api/detalles/1",
+      "body": { "campo_raro": 99 },
+      "respuesta_esperada": { "status": 400 }
+    }
+  ],
+
+  "informe": [
+    {
+      "nombre": "Informe general con SQL puro ($queryRaw) – consigna 3.4",
+      "metodo": "GET",
+      "url": "/api/informe",
+      "body": null,
+      "respuesta_esperada": {
+        "status": 200,
+        "campos": [
+          "titulo",
+          "generado_en",
+          "resumen_general",
+          "top_5_clientes_por_facturacion",
+          "productos_con_stock_bajo",
+          "rendimiento_empleados"
+        ]
+      }
+    }
+  ]
+}

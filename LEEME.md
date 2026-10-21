@@ -152,6 +152,7 @@ Rutas especiales:
 | `GET` | `/api/detalles/pedido/:id_pedido` | Detalles de un pedido (filtro opcional `?producto=1`) |
 | `GET` | `/api/detalles/mas-vendidos` | Productos más vendidos (SUM + GROUP BY) |
 | `PATCH` | `/api/detalles/:id` | Modifica una línea de detalle |
+| `GET` | `/api/informe` | **[Consigna 3.4]** Informe general con SQL puro (`$queryRaw`): resumen global, top 5 clientes, stock bajo y rendimiento de empleados |
 
 Estados válidos de un pedido: `pendiente`, `enviado`, `entregado`, `cancelado`.
 
@@ -202,7 +203,7 @@ Tablas: `clientes`, `companias_envio`, `empleados`, `proveedores`, `productos`, 
 - [x] Todos los endpoints migrados a Prisma ORM
 - [x] Connection Pool configurado (`src/config/prisma.ts`)
 - [x] Manejo global de errores con códigos HTTP semánticos
-- [ ] Ruta de informe con SQL puro (`$queryRaw`) – consigna 3.4
-- [ ] Respuestas teóricas – consignas 3.1, 3.2 y 3.3
-- [ ] Archivo `.json` con casos de prueba de todos los endpoints
+- [x] Ruta de informe con SQL puro (`$queryRaw`) – consigna 3.4 → `GET /api/informe`
+- [x] Respuestas teóricas – consignas 3.1, 3.2 y 3.3 → `respuestas_teoricas.md`
+- [x] Archivo `.json` con casos de prueba de todos los endpoints → `casos_de_prueba.json`
 - [ ] Esquema relacional en imagen (`.jpg`) en la raíz del proyecto
