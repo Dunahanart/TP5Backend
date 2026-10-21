@@ -1,18 +1,11 @@
 import type { NextFunction, Request, Response } from 'express';
-// ============================================================
-//  [CAMBIO TP4] Controller de detalles - Correcciones 2 y 3 del profesor:
-//   * CORRECCION 2: el precio_unitario (histórico) lo define el SERVIDOR.
-//     Al crear un detalle busca el precio vigente del producto y calcula
-//     el subtotal. El cliente ya NO manda precio ni subtotal en el body.
-//     Si el producto no existe → 404.
-//   * CORRECCION 3: repetir un producto en el mismo pedido → 409
-//     (lo resuelven el UNIQUE de la BD + el errorHandler global)
-//   * Los catch delegan con next(error) al errorHandler global
-//  [Migración TS] Antes era detalles_pedido.controller.mjs.
-// ============================================================
 import detallePedidoModel from '../models/detalles_pedido.model.js';
 import productoModel from '../models/productos.model.js';
 import { leerId, ID_INVALIDO } from '../utils/params.js';
+
+// El precio y el subtotal los calcula el servidor, no el cliente
+// Así guardamos el precio que tenía el producto en el momento de la venta (precio histórico)
+// Si el producto cambia de precio después, el detalle ya tiene el precio viejo guardado - Leo y Juan
 
 class DetallePedidoController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -29,9 +22,7 @@ class DetallePedidoController {
                 return;
             }
 
-            // [CORRECCION 2] Precio histórico: lo define el SERVIDOR al momento de la venta,
-            // tomando el precio vigente del producto. Así nadie puede alterarlo
-            // desde el cliente y el subtotal queda consistente.
+            // Buscamos el producto para obtener el precio actual
             const producto = await productoModel.obtenerPorId(Number(id_producto));
             if (!producto) {
                 res.status(404).json({ error: "Producto no encontrado." });
@@ -56,35 +47,29 @@ class DetallePedidoController {
                 subtotal
             });
         } catch (error) {
-            console.error("Error al crear detalle:", error);
             next(error);
         }
     }
 
     async obtenerPorPedido(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            // En este caso, el ID del pedido viene por la URL (ej: /api/detalles/pedido/1)
             const id_pedido = leerId(req.params.id_pedido);
             if (id_pedido === null) {
                 res.status(400).json(ID_INVALIDO);
                 return;
             }
             const detalles = await detallePedidoModel.obtenerPorPedido(id_pedido, req.query);
-
             res.status(200).json(detalles);
         } catch (error) {
-            console.error("Error al obtener detalles:", error);
             next(error);
         }
     }
 
-    // AGGREGATION: /api/detalles/mas-vendidos (SUM + JOIN + GROUP BY)
     async productosMasVendidos(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const productos = await detallePedidoModel.obtenerProductosMasVendidos();
             res.status(200).json(productos);
         } catch (error) {
-            console.error("Error al obtener productos más vendidos:", error);
             next(error);
         }
     }
@@ -97,16 +82,12 @@ class DetallePedidoController {
                 return;
             }
             const resultado = await detallePedidoModel.actualizarParcial(id, req.body);
-
             if (!resultado) {
                 res.status(400).json({ error: "Debe enviar al menos un campo válido a modificar." });
                 return;
             }
-
-
             res.status(200).json({ mensaje: "Detalle actualizado parcialmente" });
         } catch (error) {
-            console.error("Error al actualizar detalle (parcial):", error);
             next(error);
         }
     }

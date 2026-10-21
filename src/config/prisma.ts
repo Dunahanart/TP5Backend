@@ -2,22 +2,17 @@ import 'dotenv/config';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { PrismaClient } from '../generated/prisma/client.js';
 
-// ============================================================
-//  [TP5 - consigna 2.4] Archivo de conexión con CONNECTION POOL
-//
-//  En Prisma 7 el cliente se conecta a través de un "adapter".
-//  PrismaMariaDb crea y administra un pool de conexiones a MySQL:
-//  en vez de abrir una conexión por consulta, reutiliza hasta
-//  `connectionLimit` conexiones abiertas.
-//
-//  Los datos de conexión salen de DATABASE_URL (archivo .env):
-//    DATABASE_URL="mysql://usuario:clave@host:puerto/base"
-// ============================================================
+// Acá configuramos la conexión a la base de datos con Prisma
+// Usamos un "pool de conexiones" que es básicamente tener varias
+// conexiones abiertas para no abrir y cerrar una cada vez que llega un request
+// Lo pedía la consigna 2.4 - Juan
+
 const urlString = process.env.DATABASE_URL;
 if (!urlString) {
     throw new Error('Falta la variable DATABASE_URL en el archivo .env');
 }
 
+// Parseamos la URL para sacar el host, puerto, usuario, etc
 const url = new URL(urlString);
 
 const adapter = new PrismaMariaDb({
@@ -26,10 +21,10 @@ const adapter = new PrismaMariaDb({
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     database: url.pathname.slice(1),
-    connectionLimit: 10   // máximo de conexiones simultáneas del pool
+    connectionLimit: 10  // máximo 10 conexiones al mismo tiempo
 });
 
-// Una única instancia de PrismaClient para toda la aplicación
+// Una sola instancia de Prisma para toda la app (si creás más de una rompe)
 const prisma = new PrismaClient({ adapter });
 
 export default prisma;

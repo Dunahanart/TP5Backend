@@ -1,18 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
-// ============================================================
-//  [CAMBIO TP4] Controller de pedidos - Corrección 4 del profesor:
-//   * Nuevo campo 'estado': pendiente / enviado / entregado / cancelado
-//   * Se valida en crear(), actualizar() y actualizarParcial() → 400 si no es válido
-//   * Filtro nuevo: GET /api/pedidos?estado=entregado
-//   * Los catch delegan con next(error) al errorHandler global,
-//     así los errores de BD responden 409/400 en vez de un 500 genérico
-//  [Migración TS] Antes era pedidos.controller.mjs.
-// ============================================================
 import pedidoModel from '../models/pedidos.model.js';
 import { leerId, ID_INVALIDO } from '../utils/params.js';
 
-// [CORRECCION 4] Estados posibles del pedido (mismo ENUM que define la base
-// de datos). Si el cliente manda uno distinto → respondemos 400.
+// Los estados posibles del pedido, tienen que coincidir con el ENUM de la BD
 const ESTADOS_PERMITIDOS = ['pendiente', 'enviado', 'entregado', 'cancelado'];
 
 class PedidoController {
@@ -20,7 +10,6 @@ class PedidoController {
         try {
             const { id_cliente, estado } = req.body;
 
-            // Regla de negocio: No hay pedido fantasma, necesitamos un cliente
             if (!id_cliente) {
                 res.status(400).json({ error: "El id_cliente es obligatorio para generar un pedido." });
                 return;
@@ -34,18 +23,16 @@ class PedidoController {
             const resultado = await pedidoModel.crear(req.body);
             res.status(201).json({ mensaje: "Pedido creado exitosamente", id_pedido: resultado.id_pedido });
         } catch (error) {
-            console.error("Error al crear pedido:", error);
             next(error);
         }
     }
 
     async obtenerTodos(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            // Los filtros de fecha deben venir en formato YYYY-MM-DD
+            // Las fechas tienen que venir en formato YYYY-MM-DD
             const fechaValida = /^\d{4}-\d{2}-\d{2}$/;
             for (const parametro of ['desde', 'hasta']) {
                 const valor = req.query[parametro];
-                // typeof 'string' descarta undefined, arrays y objetos anidados del query
                 if (typeof valor === 'string' && valor !== '' && !fechaValida.test(valor)) {
                     res.status(400).json({ error: `El parámetro '${parametro}' debe tener formato YYYY-MM-DD.` });
                     return;
@@ -55,7 +42,6 @@ class PedidoController {
             const pedidos = await pedidoModel.obtenerTodos(req.query);
             res.status(200).json(pedidos);
         } catch (error) {
-            console.error("Error al obtener pedidos:", error);
             next(error);
         }
     }
@@ -68,15 +54,12 @@ class PedidoController {
                 return;
             }
             const pedido = await pedidoModel.obtenerPorId(id);
-
             if (!pedido) {
                 res.status(404).json({ error: "Pedido no encontrado." });
                 return;
             }
-
             res.status(200).json(pedido);
         } catch (error) {
-            console.error("Error al obtener el pedido:", error);
             next(error);
         }
     }
@@ -90,7 +73,6 @@ class PedidoController {
             }
             const { id_cliente, estado } = req.body;
 
-            // Mantenemos la regla de negocio: un pedido no puede quedar huérfano de cliente
             if (!id_cliente) {
                 res.status(400).json({ error: "El id_cliente es obligatorio para actualizar el pedido." });
                 return;
@@ -102,11 +84,8 @@ class PedidoController {
             }
 
             await pedidoModel.actualizar(id, req.body);
-
-
             res.status(200).json({ mensaje: "Pedido actualizado exitosamente" });
         } catch (error) {
-            console.error("Error al actualizar pedido:", error);
             next(error);
         }
     }
@@ -126,16 +105,12 @@ class PedidoController {
             }
 
             const resultado = await pedidoModel.actualizarParcial(id, req.body);
-
             if (!resultado) {
                 res.status(400).json({ error: "Debe enviar al menos un campo válido a modificar." });
                 return;
             }
-
-
             res.status(200).json({ mensaje: "Pedido actualizado parcialmente" });
         } catch (error) {
-            console.error("Error al actualizar pedido (parcial):", error);
             next(error);
         }
     }
@@ -148,41 +123,26 @@ class PedidoController {
                 return;
             }
             await pedidoModel.eliminar(id);
-
-
             res.status(200).json({ mensaje: "Pedido eliminado exitosamente" });
         } catch (error) {
-            console.error("Error al eliminar pedido:", error);
-
-            // Lógica de negocio (manejo de clave foránea)
-            // Si el error es P2003 (clave foránea de Prisma), significa que el pedido ya tiene detalles asociados
-            if (error instanceof Error && 'code' in error && error.code === 'P2003') {
-                res.status(409).json({ error: "No se puede eliminar el pedido porque tiene productos asociados en sus detalles." });
-                return;
-            }
-
             next(error);
         }
     }
 
-    // AGGREGATION: /api/pedidos/estadisticas (COUNT, SUM, AVG, MAX, MIN)
     async estadisticas(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const estadisticas = await pedidoModel.obtenerEstadisticas();
             res.status(200).json(estadisticas);
         } catch (error) {
-            console.error("Error al obtener estadísticas de pedidos:", error);
             next(error);
         }
     }
 
-    // AGGREGATION: /api/pedidos/totales-por-cliente (SUM + COUNT + JOIN + GROUP BY)
     async totalesPorCliente(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const totales = await pedidoModel.obtenerTotalesPorCliente();
             res.status(200).json(totales);
         } catch (error) {
-            console.error("Error al obtener totales por cliente:", error);
             next(error);
         }
     }

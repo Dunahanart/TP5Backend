@@ -1,5 +1,4 @@
 import { Router } from 'express';
-// [Migración TS] Antes era productos.routes.mjs
 import productoController from '../controllers/productos.controller.js';
 
 const router = Router();

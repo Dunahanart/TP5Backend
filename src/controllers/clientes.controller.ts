@@ -1,21 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 import clienteModel from '../models/clientes.model.js';
+import { leerId, ID_INVALIDO } from '../utils/params.js';
 
-// [TP5 - Migración a Prisma] Controller de clientes.
-// Cambios respecto al TP4:
-//  * El id de la URL llega como texto: se convierte a número (Prisma lo exige).
-//  * Ya no existe resultado.insertId / affectedRows (eso era de mysql2):
-//    create() devuelve el cliente creado y update()/delete() lanzan
-//    el error P2025 si el id no existe (el errorHandler lo convierte en 404).
-
-// Convierte req.params.id a número entero; si no es válido devuelve null.
-// (Función suelta y no método: las rutas pasan los métodos sin `this`.)
-function leerId(req: Request): number | null {
-    const id = Number(req.params.id);
-    return Number.isInteger(id) && id > 0 ? id : null;
-}
-
-const ID_INVALIDO = { error: "El ID debe ser un número entero positivo." };
+// El controller valida los datos que llegan y llama al model
+// Si algo falla, llama a next(error) y lo agarra el errorHandler global
 
 class ClienteController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -45,7 +33,7 @@ class ClienteController {
 
     async obtenerPorId(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = leerId(req);
+            const id = leerId(req.params.id);
             if (id === null) {
                 res.status(400).json(ID_INVALIDO);
                 return;
@@ -64,7 +52,7 @@ class ClienteController {
 
     async actualizar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = leerId(req);
+            const id = leerId(req.params.id);
             if (id === null) {
                 res.status(400).json(ID_INVALIDO);
                 return;
@@ -73,13 +61,13 @@ class ClienteController {
             await clienteModel.actualizar(id, req.body);
             res.status(200).json({ mensaje: "Cliente actualizado exitosamente" });
         } catch (error) {
-            next(error);   // P2025 → 404, P2002 → 409
+            next(error);
         }
     }
 
     async eliminar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = leerId(req);
+            const id = leerId(req.params.id);
             if (id === null) {
                 res.status(400).json(ID_INVALIDO);
                 return;
@@ -88,13 +76,13 @@ class ClienteController {
             await clienteModel.eliminar(id);
             res.status(200).json({ mensaje: "Cliente eliminado exitosamente" });
         } catch (error) {
-            next(error);   // P2025 → 404, P2003 → 409
+            next(error);
         }
     }
 
     async actualizarParcial(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = leerId(req);
+            const id = leerId(req.params.id);
             if (id === null) {
                 res.status(400).json(ID_INVALIDO);
                 return;
@@ -111,7 +99,6 @@ class ClienteController {
         }
     }
 
-    // AGGREGATION: /api/clientes/estadisticas
     async estadisticas(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             res.status(200).json(await clienteModel.obtenerEstadisticas());

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import informeController from '../controllers/informe.controller.js';
 
-// [TP5 - Consigna 3.4] Ruta del informe generado con SQL puro ($queryRaw)
+// Ruta del informe - consigna 3.4
 const router = Router();
 
 router.get('/', informeController.generarInforme);

@@ -1,9 +1,8 @@
 import type { Prisma } from '../generated/prisma/client.js';
 import prisma from '../config/prisma.js';
 
-// [TP5 - Migración a Prisma] Model de proveedores (antes SQL a mano con mysql2)
 class ProveedorModel {
-    // POST: INSERT INTO proveedores ...
+
     async crear(proveedor: Record<string, any>) {
         const { razon_social, cuit, telefono, email } = proveedor;
         return prisma.proveedores.create({
@@ -11,7 +10,6 @@ class ProveedorModel {
         });
     }
 
-    // GET con filtros: /api/proveedores?razon_social=...&cuit=...&email=...
     async obtenerTodos(filtros: Record<string, any> = {}) {
         const where: Prisma.proveedoresWhereInput = {};
         if (filtros.razon_social) where.razon_social = { contains: String(filtros.razon_social) };
@@ -20,9 +18,9 @@ class ProveedorModel {
         return prisma.proveedores.findMany({ where });
     }
 
-    // AGGREGATION: cuántos productos y cuánto stock tiene cada proveedor
-    //   _count  → COUNT(...) con la relación (el JOIN lo resuelve Prisma)
-    //   groupBy + _sum → SUM(stock) ... GROUP BY id_proveedor
+    // Muestra cuántos productos y cuánto stock tiene cada proveedor
+    // El _count con select es la forma de Prisma de hacer COUNT con JOIN - Leo
+    // TODO: sería bueno agregar también el precio promedio de productos por proveedor
     async obtenerEstadisticas() {
         const [proveedores, stocks] = await Promise.all([
             prisma.proveedores.findMany({
@@ -41,12 +39,10 @@ class ProveedorModel {
         }));
     }
 
-    // GET por id (null si no existe)
     async obtenerPorId(id: number) {
         return prisma.proveedores.findUnique({ where: { id_proveedor: id } });
     }
 
-    // PUT (P2025 si no existe → 404)
     async actualizar(id: number, proveedor: Record<string, any>) {
         const { razon_social, cuit, telefono, email } = proveedor;
         return prisma.proveedores.update({
@@ -55,7 +51,6 @@ class ProveedorModel {
         });
     }
 
-    // PATCH: solo los campos permitidos que llegaron
     async actualizarParcial(id: number, proveedor: Record<string, any>) {
         const permitidas = ['razon_social', 'cuit', 'telefono', 'email'];
         const data = Object.fromEntries(Object.entries(proveedor).filter(([campo]) => permitidas.includes(campo)));
@@ -63,7 +58,6 @@ class ProveedorModel {
         return prisma.proveedores.update({ where: { id_proveedor: id }, data });
     }
 
-    // DELETE
     async eliminar(id: number) {
         return prisma.proveedores.delete({ where: { id_proveedor: id } });
     }

@@ -1,14 +1,13 @@
 import type { NextFunction, Request, Response } from 'express';
 import informeModel from '../models/informe.model.js';
 
-// ============================================================
-//  [TP5 - Consigna 3.4] Controller del informe
-//  Llama al model que usa $queryRaw (SQL puro) y arma la respuesta JSON.
-// ============================================================
+// Consigna 3.4 - ruta que genera un informe usando SQL puro ($queryRaw)
+// Ejecutamos las 4 consultas al mismo tiempo con Promise.all para que sea más rápido - Juan
+// TODO: estaría bueno agregar filtro por fecha al informe en algún momento
+
 class InformeController {
     async generarInforme(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            // Las cuatro secciones se ejecutan en paralelo para mayor performance
             const [resumen, topClientes, stockBajo, empleados] = await Promise.all([
                 informeModel.resumenGeneral(),
                 informeModel.topClientesPorFacturacion(),

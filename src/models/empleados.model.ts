@@ -1,15 +1,13 @@
 import type { Prisma } from '../generated/prisma/client.js';
 import prisma from '../config/prisma.js';
 
-// [TP5 - Migración a Prisma] Model de empleados (antes SQL a mano con mysql2)
 class EmpleadoModel {
-    // CREATE
+
     async crear(empleado: Record<string, any>) {
         const { nombre, apellido, cargo } = empleado;
         return prisma.empleados.create({ data: { nombre, apellido, cargo: cargo ?? null } });
     }
 
-    // READ con filtros: /api/empleados?nombre=...&apellido=...&cargo=...
     async obtenerTodos(filtros: Record<string, any> = {}) {
         const where: Prisma.empleadosWhereInput = {};
         if (filtros.nombre) where.nombre = { contains: String(filtros.nombre) };
@@ -18,8 +16,7 @@ class EmpleadoModel {
         return prisma.empleados.findMany({ where });
     }
 
-    // AGGREGATION: pedidos atendidos y total vendido por cada empleado
-    //   _count → cantidad de pedidos | groupBy + _sum → SUM(total) GROUP BY id_empleado
+    // Muestra cuántos pedidos atendió cada empleado y cuánto vendió en total
     async obtenerEstadisticas() {
         const [empleados, totales] = await Promise.all([
             prisma.empleados.findMany({
@@ -40,12 +37,10 @@ class EmpleadoModel {
             .sort((a, b) => b.total_vendido - a.total_vendido);
     }
 
-    // READ by ID
     async obtenerPorId(id: number) {
         return prisma.empleados.findUnique({ where: { id_empleado: id } });
     }
 
-    // UPDATE (PUT)
     async actualizar(id: number, empleado: Record<string, any>) {
         const { nombre, apellido, cargo } = empleado;
         return prisma.empleados.update({
@@ -54,7 +49,6 @@ class EmpleadoModel {
         });
     }
 
-    // UPDATE PARCIAL (PATCH)
     async actualizarParcial(id: number, empleado: Record<string, any>) {
         const permitidas = ['nombre', 'apellido', 'cargo'];
         const data = Object.fromEntries(Object.entries(empleado).filter(([campo]) => permitidas.includes(campo)));
@@ -62,7 +56,6 @@ class EmpleadoModel {
         return prisma.empleados.update({ where: { id_empleado: id }, data });
     }
 
-    // DELETE
     async eliminar(id: number) {
         return prisma.empleados.delete({ where: { id_empleado: id } });
     }

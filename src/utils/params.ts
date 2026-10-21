@@ -1,11 +1,10 @@
-// [TP5] Utilidades para leer parámetros de la URL.
-// El id llega como texto ("5"); Prisma necesita un número entero.
+// Funciones de utilidad para leer parámetros de la URL
+// El id llega como string ("5") pero Prisma necesita un número, por eso lo convertimos - Leo
 
-// Convierte el parámetro a número entero positivo; si no es válido devuelve null.
 export function leerId(valor: unknown): number | null {
     const id = Number(valor);
     return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-// Mensaje estándar para responder 400 cuando el id no es válido
+// Mensaje que reutilizamos en todos los controllers cuando el id no es válido
 export const ID_INVALIDO = { error: "El ID debe ser un número entero positivo." };

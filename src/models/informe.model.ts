@@ -1,18 +1,13 @@
 import prisma from '../config/prisma.js';
 
-// ============================================================
-//  [TP5 - Consigna 3.4] Informe general con SQL puro ($queryRaw)
-//
-//  $queryRaw ejecuta SQL escrito a mano y retorna un array de objetos.
-//  Se justifica aquí porque el informe combina varias tablas en una
-//  sola consulta con cálculos complejos (SUM, COUNT, AVG, GROUP BY,
-//  subconsultas) que serían muy difíciles de expresar con Prisma Client.
-// ============================================================
+// Acá usamos $queryRaw que es SQL puro, no el ORM de Prisma
+// Lo usamos porque el informe tiene queries muy complejas con subconsultas
+// y hacerlas con Prisma Client sería muy difícil o imposible - Juan
+// $queryRaw siempre devuelve un array de objetos (las filas del resultado)
+
 class InformeModel {
 
-    // ---------- SECCIÓN 1: Resumen general de la distribuidora ----------
-    // Una sola consulta con subconsultas que devuelve un único registro
-    // con los totales globales del negocio.
+    // Resumen general: totales de toda la distribuidora en una sola query con subconsultas
     async resumenGeneral() {
         const resultado = await prisma.$queryRaw<{
             total_clientes: bigint;
@@ -43,7 +38,8 @@ class InformeModel {
                     WHERE estado != 'cancelado')                             AS ticket_promedio
         `;
 
-        // BigInt → Number para que JSON.stringify no falle
+        // MySQL devuelve los COUNT como BigInt y JSON no sabe convertirlos solo
+        // por eso los pasamos a Number antes de mandarlos - Leo
         const r = resultado[0];
         return {
             total_clientes:      Number(r.total_clientes),
@@ -60,8 +56,7 @@ class InformeModel {
         };
     }
 
-    // ---------- SECCIÓN 2: Top 5 clientes por facturación ----------
-    // JOIN entre clientes y pedidos + SUM + GROUP BY + ORDER BY + LIMIT
+    // Top 5 clientes que más compraron (sin contar pedidos cancelados)
     async topClientesPorFacturacion() {
         const filas = await prisma.$queryRaw<{
             id_cliente: number;
@@ -74,7 +69,7 @@ class InformeModel {
                 c.id_cliente,
                 c.nombre,
                 c.apellido,
-                COUNT(p.id_pedido)       AS cantidad_pedidos,
+                COUNT(p.id_pedido)        AS cantidad_pedidos,
                 COALESCE(SUM(p.total), 0) AS total_gastado
             FROM clientes c
             LEFT JOIN pedidos p
@@ -94,8 +89,7 @@ class InformeModel {
         }));
     }
 
-    // ---------- SECCIÓN 3: Productos con stock bajo (menor a 20 unidades) ----------
-    // JOIN con proveedores + filtro WHERE stock < 20
+    // Productos con menos de 20 unidades en stock - para saber qué hay que reponer
     async productosStockBajo() {
         return prisma.$queryRaw<{
             id_producto: number;
@@ -117,8 +111,7 @@ class InformeModel {
         `;
     }
 
-    // ---------- SECCIÓN 4: Rendimiento de empleados ----------
-    // JOIN entre empleados y pedidos + COUNT + SUM + GROUP BY
+    // Rendimiento de cada empleado: cuántos pedidos atendió y cuánto vendió
     async rendimientoEmpleados() {
         const filas = await prisma.$queryRaw<{
             id_empleado: number;

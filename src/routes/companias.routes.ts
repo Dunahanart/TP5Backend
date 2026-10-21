@@ -1,5 +1,4 @@
 import { Router } from 'express';
-// [Migración TS] Antes era companias.routes.mjs
 import companiaController from '../controllers/companias.controller.js';
 
 const router = Router();

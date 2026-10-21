@@ -1,50 +1,38 @@
 import type { NextFunction, Request, Response } from 'express';
 
-// Forma del error que emiten Prisma y express.json.
-// No vienen tipados en las librerías, así que lo declaramos nosotros.
+// Interfaz para tipar los errores que manda Prisma o Express
+// code lo usa Prisma (P2002, P2003, P2025...) y type lo usa Express cuando el JSON viene mal
 interface ErrorBD extends Error {
-    code?: string;    // Prisma: 'P2002', 'P2025', 'P2003'...
-    type?: string;    // express.json: 'entity.parse.failed' (JSON malformado)
+    code?: string;
+    type?: string;
 }
 
-// ============================================================
-//  Manejador GLOBAL de errores (TP5 - consigna 2.5)
-//
-//  Se registra en app.ts DESPUÉS de todas las rutas. Recibe los errores
-//  que los controllers delegan con next(error) y los traduce en
-//  respuestas HTTP claras, SIN stack trace ni SQL crudo:
-//
-//    Prisma P2002 (valor único repetido: dni, cuit...)  → 409
-//    Prisma P2003 (clave foránea): al borrar            → 409
-//                                  al crear / editar    → 400
-//    Prisma P2025 (registro no encontrado)              → 404
-//    Prisma ValidationError (faltan / sobran campos)    → 400
-//    JSON malformado en el body                         → 400
-//    cualquier otra excepción                           → 500 genérico
-//
-//  El error real se loguea solo en el servidor; jamás se expone al cliente.
-// ============================================================
+// Este middleware captura todos los errores que los controllers mandan con next(error)
+// Se registra al final del app.ts para que funcione bien - Leo
+// Si no lo ponés al final no funciona, lo aprendimos a las malas
 class ErrorHandler {
     manejar(err: ErrorBD, req: Request, res: Response, next: NextFunction): void {
+        // Imprimimos el error en la consola del servidor para poder debuggear
         console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err.code ?? err.name, '-', err.message.split('\n').pop());
 
-        // Si la respuesta ya salió, dejamos que Express cierre la conexión
         if (res.headersSent) {
             return next(err);
         }
 
-        // Cuerpo JSON malformado
+        // Si el JSON del body viene mal formado
         if (err.type === 'entity.parse.failed') {
             res.status(400).json({ error: "JSON inválido en el cuerpo de la petición." });
             return;
         }
 
-        // ---------- Errores de Prisma ----------
+        // Errores de Prisma - cada código es un tipo de error distinto
         switch (err.code) {
             case 'P2002':
+                // DNI o CUIT duplicado
                 res.status(409).json({ error: "Ya existe un registro con ese valor (dato duplicado)." });
                 return;
             case 'P2003':
+                // Error de clave foránea - distinto si es borrado o creación
                 if (req.method === 'DELETE') {
                     res.status(409).json({ error: "No se puede eliminar: el registro tiene datos asociados." });
                 } else {
@@ -52,17 +40,18 @@ class ErrorHandler {
                 }
                 return;
             case 'P2025':
+                // El registro que querías modificar o borrar no existe
                 res.status(404).json({ error: "Registro no encontrado." });
                 return;
         }
 
-        // Prisma rechaza la consulta antes de ejecutarla (campo faltante, tipo incorrecto)
+        // Cuando Prisma detecta que los datos no tienen el formato correcto
         if (err.name === 'PrismaClientValidationError') {
             res.status(400).json({ error: "Datos inválidos: revisá los campos enviados." });
             return;
         }
 
-        // Cualquier otra excepción: 500 genérico sin stack trace
+        // Cualquier otro error que no previmos
         res.status(500).json({ error: "Error interno del servidor." });
     }
 }
