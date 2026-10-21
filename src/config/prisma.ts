@@ -21,7 +21,8 @@ const adapter = new PrismaMariaDb({
     user: decodeURIComponent(url.username),
     password: decodeURIComponent(url.password),
     database: url.pathname.slice(1),
-    connectionLimit: 10  // máximo 10 conexiones al mismo tiempo
+    connectionLimit: 10,   // máximo 10 conexiones al mismo tiempo
+    connectTimeout: 5000   // si la BD no responde en 5 segundos, falla rápido en vez de esperar ~10s
 });
 
 // Una sola instancia de Prisma para toda la app (si creás más de una rompe)

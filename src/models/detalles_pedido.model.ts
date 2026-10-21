@@ -12,6 +12,40 @@ class DetallePedidoModel {
         });
     }
 
+    // Lista todos los detalles (de todos los pedidos)
+    async obtenerTodos() {
+        const detalles = await prisma.detalles_pedido.findMany({
+            include: { productos: { select: { nombre: true } } }
+        });
+        return detalles.map(d => ({
+            id_detalle: d.id_detalle,
+            id_pedido: d.id_pedido,
+            cantidad: d.cantidad,
+            precio_unitario: d.precio_unitario,
+            subtotal: d.subtotal,
+            id_producto: d.id_producto,
+            producto_nombre: d.productos?.nombre ?? null
+        }));
+    }
+
+    async obtenerPorId(id: number) {
+        const d = await prisma.detalles_pedido.findUnique({
+            where: { id_detalle: id },
+            include: { productos: { select: { nombre: true, precio_unitario: true } } }
+        });
+        if (!d) return null;
+        return {
+            id_detalle: d.id_detalle,
+            id_pedido: d.id_pedido,
+            cantidad: d.cantidad,
+            precio_unitario: d.precio_unitario,   // precio histórico
+            subtotal: d.subtotal,
+            id_producto: d.id_producto,
+            producto_nombre: d.productos?.nombre ?? null,
+            producto_precio: d.productos?.precio_unitario ?? null  // precio actual
+        };
+    }
+
     // Trae los detalles de un pedido con el nombre del producto (include = JOIN)
     // filtro opcional: ?producto=1
     async obtenerPorPedido(id_pedido: number, filtros: Record<string, any> = {}) {
@@ -59,11 +93,24 @@ class DetallePedidoModel {
         }));
     }
 
+    // PUT: reemplaza todos los campos del detalle
+    async actualizar(id: number, detalle: Record<string, any>) {
+        const { id_pedido, id_producto, cantidad, precio_unitario, subtotal } = detalle;
+        return prisma.detalles_pedido.update({
+            where: { id_detalle: id },
+            data: { id_pedido: Number(id_pedido), id_producto: Number(id_producto), cantidad: Number(cantidad), precio_unitario, subtotal }
+        });
+    }
+
     async actualizarParcial(id: number, detalle: Record<string, any>) {
         const permitidas = ['id_pedido', 'id_producto', 'cantidad', 'precio_unitario', 'subtotal'];
         const data = Object.fromEntries(Object.entries(detalle).filter(([campo]) => permitidas.includes(campo)));
         if (Object.keys(data).length === 0) return null;
         return prisma.detalles_pedido.update({ where: { id_detalle: id }, data });
+    }
+
+    async eliminar(id: number) {
+        return prisma.detalles_pedido.delete({ where: { id_detalle: id } });
     }
 }
 
