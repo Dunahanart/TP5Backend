@@ -102,8 +102,8 @@ class DetallePedidoController {
     }
 
     // PUT: reemplaza todos los campos del detalle
-    // Ojo: el precio y subtotal acá los manda el cliente, no los calcula el servidor - Juan
-    // TODO: ver si conviene recalcular el subtotal acá también como en el POST
+    // Igual que el POST, el precio lo manda el cliente (para respetar el precio histórico
+    // de la venta) pero el SUBTOTAL lo calcula SIEMPRE el servidor - Juan
     async actualizar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const id = leerId(req.params.id);
@@ -111,9 +111,17 @@ class DetallePedidoController {
                 res.status(400).json(ID_INVALIDO);
                 return;
             }
-            const { id_pedido, id_producto, cantidad, precio_unitario, subtotal } = req.body;
-            if (!id_pedido || !id_producto || !cantidad || !precio_unitario || !subtotal) {
-                res.status(400).json({ error: "Faltan datos obligatorios (id_pedido, id_producto, cantidad, precio_unitario, subtotal)." });
+            const { id_pedido, id_producto, cantidad, precio_unitario } = req.body;
+            if (!id_pedido || !id_producto || !cantidad || precio_unitario === undefined) {
+                res.status(400).json({ error: "Faltan datos obligatorios (id_pedido, id_producto, cantidad, precio_unitario)." });
+                return;
+            }
+            if (Number(cantidad) <= 0) {
+                res.status(400).json({ error: "La cantidad debe ser un número mayor a cero." });
+                return;
+            }
+            if (Number.isNaN(Number(precio_unitario)) || Number(precio_unitario) < 0) {
+                res.status(400).json({ error: "El precio unitario no puede ser negativo." });
                 return;
             }
             await detallePedidoModel.actualizar(id, req.body);

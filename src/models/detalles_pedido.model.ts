@@ -93,19 +93,35 @@ class DetallePedidoModel {
         }));
     }
 
-    // PUT: reemplaza todos los campos del detalle
+    // PUT: reemplaza todos los campos del detalle.
+    // El subtotal NUNCA lo manda el cliente: lo calculamos acá como cantidad x precio - Juan
     async actualizar(id: number, detalle: Record<string, any>) {
-        const { id_pedido, id_producto, cantidad, precio_unitario, subtotal } = detalle;
+        const { id_pedido, id_producto, cantidad, precio_unitario } = detalle;
+        const subtotal = Number(cantidad) * Number(precio_unitario);
         return prisma.detalles_pedido.update({
             where: { id_detalle: id },
             data: { id_pedido: Number(id_pedido), id_producto: Number(id_producto), cantidad: Number(cantidad), precio_unitario, subtotal }
         });
     }
 
+    // PATCH: solo actualiza los campos que llegaron.
+    // Si cambia la cantidad o el precio, recalculamos el subtotal con los valores combinados - Juan
     async actualizarParcial(id: number, detalle: Record<string, any>) {
-        const permitidas = ['id_pedido', 'id_producto', 'cantidad', 'precio_unitario', 'subtotal'];
+        // 'subtotal' no está en la lista: siempre se deriva de cantidad x precio
+        const permitidas = ['id_pedido', 'id_producto', 'cantidad', 'precio_unitario'];
         const data = Object.fromEntries(Object.entries(detalle).filter(([campo]) => permitidas.includes(campo)));
         if (Object.keys(data).length === 0) return null;
+
+        if (data.cantidad !== undefined || data.precio_unitario !== undefined) {
+            const actual = await prisma.detalles_pedido.findUnique({ where: { id_detalle: id } });
+            if (actual) {
+                const cantidad = Number(data.cantidad ?? actual.cantidad);
+                const precio = Number(data.precio_unitario ?? actual.precio_unitario);
+                data.subtotal = cantidad * precio;
+            }
+            // si el detalle no existe, seguimos igual para que update tire P2025 y devuelva 404
+        }
+
         return prisma.detalles_pedido.update({ where: { id_detalle: id }, data });
     }
 

@@ -5,6 +5,12 @@ import { leerId, ID_INVALIDO } from '../utils/params.js';
 // Los estados posibles del pedido, tienen que coincidir con el ENUM de la BD
 const ESTADOS_PERMITIDOS = ['pendiente', 'enviado', 'entregado', 'cancelado'];
 
+// La BD tiene un CHECK que impide totales negativos, pero si lo dejamos pasar
+// el error llega crudo como 500. Acá lo frenamos antes para devolver un 400 claro - Juan
+function totalInvalido(total: unknown): boolean {
+    return total !== undefined && (Number.isNaN(Number(total)) || Number(total) < 0);
+}
+
 class PedidoController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
@@ -12,6 +18,11 @@ class PedidoController {
 
             if (!id_cliente) {
                 res.status(400).json({ error: "El id_cliente es obligatorio para generar un pedido." });
+                return;
+            }
+
+            if (totalInvalido(req.body.total)) {
+                res.status(400).json({ error: "El total no puede ser negativo." });
                 return;
             }
 
@@ -78,6 +89,11 @@ class PedidoController {
                 return;
             }
 
+            if (totalInvalido(req.body.total)) {
+                res.status(400).json({ error: "El total no puede ser negativo." });
+                return;
+            }
+
             if (estado && !ESTADOS_PERMITIDOS.includes(estado)) {
                 res.status(400).json({ error: `El estado debe ser uno de: ${ESTADOS_PERMITIDOS.join(', ')}.` });
                 return;
@@ -98,6 +114,11 @@ class PedidoController {
                 return;
             }
             const { estado } = req.body;
+
+            if (totalInvalido(req.body.total)) {
+                res.status(400).json({ error: "El total no puede ser negativo." });
+                return;
+            }
 
             if (estado && !ESTADOS_PERMITIDOS.includes(estado)) {
                 res.status(400).json({ error: `El estado debe ser uno de: ${ESTADOS_PERMITIDOS.join(', ')}.` });

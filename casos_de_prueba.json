@@ -2,7 +2,14 @@
   "_info": {
     "titulo": "Casos de prueba – TP5 Backend Distribuidora",
     "base_url": "http://localhost:3000",
-    "nota": "Importar en Postman o Thunder Client. Los IDs en las rutas asumen que la BD fue cargada con database.sql."
+    "como_ejecutar": [
+      "1. Importar database.sql en MySQL (phpMyAdmin > Importar) para recrear la base con los datos de ejemplo.",
+      "2. npm install",
+      "3. Crear el archivo .env con: DATABASE_URL=\"mysql://root:@localhost:3306/distribuidora_ipap\"",
+      "4. npx prisma generate",
+      "5. npm run dev  ->  el servidor queda escuchando en http://localhost:3000"
+    ],
+    "nota": "Importar este archivo en Postman o Thunder Client. Los IDs de las rutas asumen que la BD fue cargada con database.sql."
   },
 
   "ping": [
@@ -581,11 +588,11 @@
       "respuesta_esperada": { "status": 200, "campos": ["id_producto", "nombre", "unidades_vendidas", "facturado"] }
     },
     {
-      "nombre": "Actualizar detalle parcial (PATCH) – cambiar cantidad",
+      "nombre": "Actualizar detalle parcial (PATCH) – cambiar cantidad (el subtotal se recalcula solo)",
       "metodo": "PATCH",
       "url": "/api/detalles/1",
-      "body": { "cantidad": 5, "subtotal": 12502.50 },
-      "respuesta_esperada": { "status": 200 }
+      "body": { "cantidad": 5 },
+      "respuesta_esperada": { "status": 200, "subtotal_calculado": 6000.00 }
     },
     {
       "nombre": "Actualizar detalle – sin campos válidos",
@@ -593,6 +600,72 @@
       "url": "/api/detalles/1",
       "body": { "campo_raro": 99 },
       "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Listar todos los detalles (de todos los pedidos)",
+      "metodo": "GET",
+      "url": "/api/detalles",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "Obtener detalle por ID (devuelve nombre y precio actual del producto)",
+      "metodo": "GET",
+      "url": "/api/detalles/1",
+      "body": null,
+      "respuesta_esperada": {
+        "status": 200,
+        "campos": ["id_detalle", "id_pedido", "cantidad", "precio_unitario", "subtotal", "producto_nombre", "producto_precio"]
+      }
+    },
+    {
+      "nombre": "Obtener detalle – ID no numérico",
+      "metodo": "GET",
+      "url": "/api/detalles/abc",
+      "body": null,
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Obtener detalle – ID inexistente",
+      "metodo": "GET",
+      "url": "/api/detalles/9999",
+      "body": null,
+      "respuesta_esperada": { "status": 404 }
+    },
+    {
+      "nombre": "Reemplazar detalle (PUT) – el subtotal lo calcula el servidor (2 x 1200 = 2400)",
+      "metodo": "PUT",
+      "url": "/api/detalles/1",
+      "body": { "id_pedido": 1, "id_producto": 3, "cantidad": 2, "precio_unitario": 1200.00 },
+      "respuesta_esperada": { "status": 200, "subtotal_calculado": 2400.00 }
+    },
+    {
+      "nombre": "Reemplazar detalle – faltan campos obligatorios",
+      "metodo": "PUT",
+      "url": "/api/detalles/1",
+      "body": { "id_pedido": 1 },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Reemplazar detalle – cantidad negativa",
+      "metodo": "PUT",
+      "url": "/api/detalles/1",
+      "body": { "id_pedido": 1, "id_producto": 3, "cantidad": -2, "precio_unitario": 1200.00 },
+      "respuesta_esperada": { "status": 400 }
+    },
+    {
+      "nombre": "Eliminar detalle – ID inexistente",
+      "metodo": "DELETE",
+      "url": "/api/detalles/9999",
+      "body": null,
+      "respuesta_esperada": { "status": 404 }
+    },
+    {
+      "nombre": "Eliminar detalle – el creado en el primer caso (id_detalle 13)",
+      "metodo": "DELETE",
+      "url": "/api/detalles/13",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
     }
   ],
 
