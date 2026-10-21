@@ -153,9 +153,6 @@ Rutas especiales:
 | `GET` | `/api/detalles/mas-vendidos` | Productos más vendidos (SUM + GROUP BY) |
 | `PATCH` | `/api/detalles/:id` | Modifica una línea de detalle |
 | `GET` | `/api/informe` | **[Consigna 3.4]** Informe general con SQL puro (`$queryRaw`): resumen global, top 5 clientes, stock bajo y rendimiento de empleados |
-| `POST` | `/api/usuarios` | Crear usuario |
-| `GET` | `/api/usuarios` | Listar usuarios (sin contraseña) |
-| `DELETE` | `/api/usuarios/:id` | Eliminar usuario |
 
 Estados válidos de un pedido: `pendiente`, `enviado`, `entregado`, `cancelado`.
 
