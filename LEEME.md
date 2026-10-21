@@ -153,6 +153,9 @@ Rutas especiales:
 | `GET` | `/api/detalles/mas-vendidos` | Productos más vendidos (SUM + GROUP BY) |
 | `PATCH` | `/api/detalles/:id` | Modifica una línea de detalle |
 | `GET` | `/api/informe` | **[Consigna 3.4]** Informe general con SQL puro (`$queryRaw`): resumen global, top 5 clientes, stock bajo y rendimiento de empleados |
+| `POST` | `/api/usuarios` | Crear usuario |
+| `GET` | `/api/usuarios` | Listar usuarios (sin contraseña) |
+| `DELETE` | `/api/usuarios/:id` | Eliminar usuario |
 
 Estados válidos de un pedido: `pendiente`, `enviado`, `entregado`, `cancelado`.
 
@@ -177,7 +180,8 @@ La API **nunca** devuelve un stack trace ni SQL crudo. Los errores de base de da
 Tablas: `clientes`, `companias_envio`, `empleados`, `proveedores`, `productos`, `pedidos`, `detalles_pedido`, `usuario`.
 
 - **`database.sql` es la fuente de verdad** para recrear la base: incluye las restricciones `CHECK` (precio, stock y cantidad no negativos), que Prisma no puede representar en `schema.prisma`.
-- Por eso **no** se recomienda crear la base con `prisma migrate`: no agregaría esos `CHECK`.
+- Por eso **no** se recomienda crear la base con `prisma migrate`: no agregaría esos `CHECK` y los datos quedarían sin esas restricciones de integridad.
+- Si alguna vez corrés `prisma migrate reset` también se perderían los `CHECK` — siempre reimportá `database.sql` para tener la BD completa.
 - Si cambiás el `schema.prisma`, volvé a correr `npx prisma generate --config prisma7.config.ts`.
 
 ---
@@ -206,4 +210,4 @@ Tablas: `clientes`, `companias_envio`, `empleados`, `proveedores`, `productos`, 
 - [x] Ruta de informe con SQL puro (`$queryRaw`) – consigna 3.4 → `GET /api/informe`
 - [x] Respuestas teóricas – consignas 3.1, 3.2 y 3.3 → `respuestas_teoricas.md`
 - [x] Archivo `.json` con casos de prueba de todos los endpoints → `casos_de_prueba.json`
-- [ ] Esquema relacional en imagen (`.jpg`) en la raíz del proyecto
+- [x] Esquema relacional en imagen en la raíz del proyecto → `estructura.png`

@@ -11,6 +11,7 @@ import companiasRoutes from './routes/companias.routes.js';
 import pedidosRoutes from './routes/pedidos.routes.js';
 import detallesPedidoRoutes from './routes/detalles_pedido.routes.js';
 import informeRoutes from './routes/informe.routes.js';
+import usuarioRoutes from './routes/usuario.routes.js';
 
 const app = express();
 
@@ -36,6 +37,13 @@ app.use('/api/companias', companiasRoutes);
 app.use('/api/pedidos', pedidosRoutes);
 app.use('/api/detalles', detallesPedidoRoutes);
 app.use('/api/informe', informeRoutes);
+app.use('/api/usuarios', usuarioRoutes);
+
+// Cualquier ruta que no existe responde JSON, no HTML - Leo
+// Sin esto Express devuelve una página HTML con "Cannot GET /..." y eso no es correcto
+app.use((_req, res) => {
+    res.status(404).json({ error: "Ruta no encontrada." });
+});
 
 // El errorHandler SIEMPRE va al final, después de todas las rutas
 // Si lo ponés antes no captura los errores - Juan

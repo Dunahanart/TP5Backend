@@ -51,6 +51,33 @@ class DetallePedidoController {
         }
     }
 
+    async obtenerTodos(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const detalles = await detallePedidoModel.obtenerTodos();
+            res.status(200).json(detalles);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async obtenerPorId(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
+            const detalle = await detallePedidoModel.obtenerPorId(id);
+            if (!detalle) {
+                res.status(404).json({ error: "Detalle no encontrado." });
+                return;
+            }
+            res.status(200).json(detalle);
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async obtenerPorPedido(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const id_pedido = leerId(req.params.id_pedido);
@@ -74,6 +101,28 @@ class DetallePedidoController {
         }
     }
 
+    // PUT: reemplaza todos los campos del detalle
+    // Ojo: el precio y subtotal acá los manda el cliente, no los calcula el servidor - Juan
+    // TODO: ver si conviene recalcular el subtotal acá también como en el POST
+    async actualizar(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
+            const { id_pedido, id_producto, cantidad, precio_unitario, subtotal } = req.body;
+            if (!id_pedido || !id_producto || !cantidad || !precio_unitario || !subtotal) {
+                res.status(400).json({ error: "Faltan datos obligatorios (id_pedido, id_producto, cantidad, precio_unitario, subtotal)." });
+                return;
+            }
+            await detallePedidoModel.actualizar(id, req.body);
+            res.status(200).json({ mensaje: "Detalle actualizado exitosamente" });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async actualizarParcial(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const id = leerId(req.params.id);
@@ -87,6 +136,20 @@ class DetallePedidoController {
                 return;
             }
             res.status(200).json({ mensaje: "Detalle actualizado parcialmente" });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async eliminar(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const id = leerId(req.params.id);
+            if (id === null) {
+                res.status(400).json(ID_INVALIDO);
+                return;
+            }
+            await detallePedidoModel.eliminar(id);
+            res.status(200).json({ mensaje: "Detalle eliminado exitosamente" });
         } catch (error) {
             next(error);
         }
