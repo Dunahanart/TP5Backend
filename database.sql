@@ -153,7 +153,15 @@ CREATE TABLE `detalles_pedido` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ------------------------------------------------------------
--- usuario  [TP5] tabla agregada al modelado con Prisma (consigna 1.3)
+-- Tabla: usuario
+--
+-- Consigna 1.3 del TP5 permite agregar tablas adicionales al modelado
+-- si el sistema las necesita. Esta tabla se incorpora pensando en una
+-- futura autenticación de los empleados que operan el sistema (login).
+--
+-- Por ahora solo se modela la estructura: la lógica de autenticación
+-- (hash de contraseña con bcrypt, tokens JWT, etc.) queda fuera del
+-- alcance de este trabajo práctico.
 -- ------------------------------------------------------------
 CREATE TABLE `usuario` (
     `id_usuario` INT(11) NOT NULL AUTO_INCREMENT,
