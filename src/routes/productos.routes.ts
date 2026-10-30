@@ -1,14 +1,17 @@
 import { Router } from 'express';
 import productoController from '../controllers/productos.controller.js';
+import { validar } from '../middlewares/validar.middleware.js';
+import { actualizarProducto, actualizarProductoParcial, crearProducto, filtrosProducto } from '../validators/productos.validators.js';
 
 const router = Router();
 
-router.post('/', productoController.crear);
-router.get('/', productoController.obtenerTodos);
+// Capa de validación antes del controller (express-validator)
+router.post('/', ...validar(crearProducto), productoController.crear);
+router.get('/', ...validar(filtrosProducto, 'query'), productoController.obtenerTodos);
 router.get('/estadisticas', productoController.estadisticas);
 router.get('/:id', productoController.obtenerPorId);
-router.put('/:id', productoController.actualizar);
-router.patch('/:id', productoController.actualizarParcial);
+router.put('/:id', ...validar(actualizarProducto), productoController.actualizar);
+router.patch('/:id', ...validar(actualizarProductoParcial), productoController.actualizarParcial);
 router.delete('/:id', productoController.eliminar);
 
 export default router;

@@ -2,14 +2,18 @@
 --  TP N° 5 - TypeScript + ORM Prisma: Distribuidora
 --  Script para recrear la base de datos `distribuidora_ipap`
 --
---  Incluye las 5 correcciones del profesor (TP4) y las tablas
---  agregadas en TP5 (usuario).
---  Buscá por "CORRECCION" para encontrar cada una:
+--  Incluye las 5 correcciones del profesor (TP4), las tablas
+--  agregadas en TP5 (usuario) y las observaciones del TP5:
+--  Buscá por "CORRECCION" o "TP5" para encontrar cada una:
 --    CORRECCION 1: CREATE DATABASE + USE (el script se ejecuta solo)
 --    CORRECCION 2: precio_unitario histórico en detalles_pedido
---    CORRECCION 3: UNIQUE (id_pedido, id_producto)
+--    CORRECCION 3: CLAVE COMPUESTA (id_pedido, id_producto) en detalles_pedido
 --    CORRECCION 4: estado del pedido (ENUM)
 --    CORRECCION 5: CHECK contra precios / stock / cantidad negativos
+--    TP5 AUDITORIA: created_at + updated_at en todas las tablas del negocio
+--    TP5 SOFT DELETE: empleados.activo (no se borra un empleado con ventas)
+--    TP5 FK RESTRICT: no se borra proveedor / compañía / empleado referenciado
+--    TP5 TOTAL: el total del pedido lo recalcula el servidor desde los detalles
 -- ============================================================
 
 -- [CORRECCION 1] El script debe crear y seleccionar la base de datos,
@@ -41,6 +45,10 @@ CREATE TABLE `clientes` (
     `dni`        VARCHAR(15) NOT NULL,
     `direccion`  VARCHAR(150) DEFAULT NULL,
     `telefono`   VARCHAR(20) DEFAULT NULL,
+    -- [TP5 AUDITORIA] created_at se llena solo al insertar; updated_at lo refresca
+    -- MySQL en cada UPDATE (y Prisma lo escribe explícitamente desde el ORM)
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id_cliente`),
     UNIQUE KEY `dni` (`dni`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -52,6 +60,8 @@ CREATE TABLE `companias_envio` (
     `id_compania` INT(11) NOT NULL AUTO_INCREMENT,
     `nombre`      VARCHAR(100) NOT NULL,
     `telefono`    VARCHAR(20) DEFAULT NULL,
+    `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id_compania`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -63,6 +73,12 @@ CREATE TABLE `empleados` (
     `nombre`      VARCHAR(50) NOT NULL,
     `apellido`    VARCHAR(50) NOT NULL,
     `cargo`       VARCHAR(50) DEFAULT NULL,
+    -- [TP5 SOFT DELETE] Un empleado con ventas no se borra: se pone activo = 0.
+    -- Así los pedidos que ya existen siguen sabiendo quién hizo la venta.
+    -- La API filtra por activo = 1 en todos los GET.
+    `activo`      TINYINT(1) NOT NULL DEFAULT 1,
+    `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id_empleado`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -75,6 +91,8 @@ CREATE TABLE `proveedores` (
     `cuit`         VARCHAR(15) NOT NULL,
     `telefono`     VARCHAR(20) DEFAULT NULL,
     `email`        VARCHAR(100) DEFAULT NULL,
+    `created_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id_proveedor`),
     UNIQUE KEY `cuit` (`cuit`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -91,10 +109,14 @@ CREATE TABLE `productos` (
     -- [CORRECCION 5] No se permite bajar el stock por debajo de 0
     `stock`          INT(11) NOT NULL DEFAULT 0 CHECK (`stock` >= 0),
     `id_proveedor`   INT(11) DEFAULT NULL,
+    `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id_producto`),
+    -- [TP5 FK RESTRICT] No se puede borrar un proveedor que todavía tiene
+    -- productos cargados: la API contesta 409 en vez de dejar productos colgando.
     CONSTRAINT `fk_productos_proveedor`
         FOREIGN KEY (`id_proveedor`) REFERENCES `proveedores` (`id_proveedor`)
-        ON DELETE SET NULL ON UPDATE CASCADE
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ------------------------------------------------------------
@@ -111,25 +133,33 @@ CREATE TABLE `pedidos` (
     `id_cliente`  INT(11) DEFAULT NULL,
     `id_empleado` INT(11) DEFAULT NULL,
     `id_compania` INT(11) DEFAULT NULL,
+    `created_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id_pedido`),
     CONSTRAINT `fk_pedidos_cliente`
         FOREIGN KEY (`id_cliente`) REFERENCES `clientes` (`id_cliente`)
         ON UPDATE CASCADE,
+    -- [TP5 FK RESTRICT] No se borra un empleado que ya hizo ventas (y además
+    -- existe el soft delete en empleados.activo). Ídem para la compañía de envío.
     CONSTRAINT `fk_pedidos_empleado`
         FOREIGN KEY (`id_empleado`) REFERENCES `empleados` (`id_empleado`)
-        ON DELETE SET NULL ON UPDATE CASCADE,
+        ON UPDATE CASCADE,
     CONSTRAINT `fk_pedidos_compania`
         FOREIGN KEY (`id_compania`) REFERENCES `companias_envio` (`id_compania`)
-        ON DELETE SET NULL ON UPDATE CASCADE
+        ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ------------------------------------------------------------
 -- detalles_pedido
 -- ------------------------------------------------------------
 CREATE TABLE `detalles_pedido` (
-    `id_detalle`     INT(11) NOT NULL AUTO_INCREMENT,
-    `id_pedido`      INT(11) DEFAULT NULL,
-    `id_producto`    INT(11) DEFAULT NULL,
+    -- [CORRECCION 3] La identidad de un detalle es (pedido, producto): no existe
+    -- un id_detalle propio. Si el mismo producto se vende dos veces en el mismo
+    -- pedido, el cajero suma cantidades en una sola línea. Es el mismo diseño que
+    -- la tabla intermedia CursosEstudiantes (@@id([curso_id, estudiante_id])).
+    -- La PK compuesta reemplaza al UNIQUE KEY pedido_producto de antes.
+    `id_pedido`      INT(11) NOT NULL,
+    `id_producto`    INT(11) NOT NULL,
     -- [CORRECCION 5] La cantidad debe ser al menos 1
     `cantidad`       INT(11) NOT NULL CHECK (`cantidad` > 0),
     -- [CORRECCION 2] Precio HISTÓRICO: se guarda el precio vigente del producto
@@ -138,12 +168,13 @@ CREATE TABLE `detalles_pedido` (
     -- Lo completa el servidor en el controller, nunca el cliente.
     `precio_unitario` DECIMAL(10,2) NOT NULL CHECK (`precio_unitario` >= 0),
     -- [CORRECCION 5] El subtotal tampoco puede quedar negativo
+    -- [TP5 TOTAL] subtotal = cantidad x precio_unitario, calculado SIEMPRE por el
+    -- servidor. El total del pedido se recalcula como SUM(subtotal) al crear,
+    -- modificar o borrar un detalle.
     `subtotal`       DECIMAL(10,2) NOT NULL CHECK (`subtotal` >= 0),
-    PRIMARY KEY (`id_detalle`),
-    -- [CORRECCION 3] Un mismo producto no puede figurar dos veces en el mismo
-    -- pedido: el cajero debe sumar cantidades en una sola línea. Si se intenta,
-    -- MySQL responde ERROR 1062 y la API contesta 409.
-    UNIQUE KEY `pedido_producto` (`id_pedido`, `id_producto`),
+    `created_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id_pedido`, `id_producto`),
     CONSTRAINT `fk_detalles_pedido`
         FOREIGN KEY (`id_pedido`) REFERENCES `pedidos` (`id_pedido`)
         ON DELETE CASCADE ON UPDATE CASCADE,
@@ -240,7 +271,8 @@ INSERT INTO `pedidos` (`fecha`, `total`, `estado`, `id_cliente`, `id_empleado`, 
 INSERT INTO `detalles_pedido` (`id_pedido`, `id_producto`, `cantidad`, `precio_unitario`, `subtotal`)
 VALUES (1, 1, 2, 2500.50, 5001.00);   -- [TP5] subtotal corregido: 2 x 2500.50 = 5001.00 (decía 5000.00)
 
--- [TP5] Más detalles. Cada pedido suma exactamente lo que dice su total.
+-- [TP5] Más detalles. Cada pedido suma exactamente lo que dice su total,
+-- porque así lo recalcula el servidor cada vez que se toca un detalle.
 INSERT INTO `detalles_pedido` (`id_pedido`, `id_producto`, `cantidad`, `precio_unitario`, `subtotal`) VALUES
 -- Pedido 1 (completa el 8601.00)
 (1, 3,  3, 1200.00,  3600.00),

@@ -9,7 +9,15 @@
       "4. npx prisma generate",
       "5. npm run dev  ->  el servidor queda escuchando en http://localhost:3000"
     ],
-    "nota": "Importar este archivo en Postman o Thunder Client. Los IDs de las rutas asumen que la BD fue cargada con database.sql."
+    "nota": "Importar este archivo en Postman o Thunder Client. Los IDs de las rutas asumen que la BD fue cargada con database.sql.",
+    "nota_tp5": "OJO: database.sql cambió en el TP5 (clave compuesta en detalles_pedido, auditoría created_at/updated_at, empleados.activo y FKs en RESTRICT). Si tenés la base de antes, volvé a importar database.sql o aplicá la migración 20261030120000_tp5_observaciones_profesor.",
+    "correr_en_orden": "Son 97 casos y hay que correrlos en el orden del archivo: unos pocos crean datos que borran o modifican más adelante.",
+    "cambios_tp5": [
+      "Los detalles ya no se identifican por id_detalle sino por la pareja (id_pedido, id_producto): las rutas son /api/detalles/1/3",
+      "El total del pedido lo calcula el servidor como SUM(subtotal) de los detalles; el cliente ya no lo puede mandar",
+      "El DELETE de un empleado lo desactiva (soft delete) en vez de borrarlo, y existe PUT /api/empleados/:id/reactivar",
+      "Borrar un proveedor, una compañía de envío o un empleado referenciado contesta 409 (FK en RESTRICT)"
+    ]
   },
 
   "ping": [
@@ -317,7 +325,7 @@
       "metodo": "GET",
       "url": "/api/empleados/estadisticas",
       "body": null,
-      "respuesta_esperada": { "status": 200, "campos": ["id_empleado", "nombre", "apellido", "pedidos", "total_vendido"] }
+      "respuesta_esperada": { "status": 200, "campos": ["id_empleado", "nombre", "apellido", "activo", "pedidos", "total_vendido"] }
     },
     {
       "nombre": "Obtener empleado por ID",
@@ -353,6 +361,41 @@
       "url": "/api/empleados/9999",
       "body": null,
       "respuesta_esperada": { "status": 404 }
+    },
+    {
+      "nombre": "[TP5 SOFT DELETE] Dar de baja a un empleado que SÍ tiene pedidos (no se borra, se desactiva)",
+      "metodo": "DELETE",
+      "url": "/api/empleados/3",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "[TP5 SOFT DELETE] El empleado desactivado ya no aparece en el listado",
+      "metodo": "GET",
+      "url": "/api/empleados/3",
+      "body": null,
+      "respuesta_esperada": { "status": 404 }
+    },
+    {
+      "nombre": "[TP5 SOFT DELETE] Sus pedidos viejos siguen existiendo (el empleado no se perdió de la BD)",
+      "metodo": "GET",
+      "url": "/api/pedidos?empleado=Mart%C3%ADn",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "[TP5 SOFT DELETE] Reactivar al empleado",
+      "metodo": "PUT",
+      "url": "/api/empleados/3/reactivar",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "[TP5 SOFT DELETE] Después de reactivarlo vuelve a aparecer",
+      "metodo": "GET",
+      "url": "/api/empleados/3",
+      "body": null,
+      "respuesta_esperada": { "status": 200 }
     }
   ],
 
@@ -536,7 +579,7 @@
       "metodo": "POST",
       "url": "/api/detalles",
       "body": { "id_pedido": 1, "id_producto": 2, "cantidad": 3 },
-      "respuesta_esperada": { "status": 201, "campos": ["id_detalle", "precio_unitario", "subtotal"] }
+      "respuesta_esperada": { "status": 201, "campos": ["id_pedido", "id_producto", "precio_unitario", "subtotal"] }
     },
     {
       "nombre": "Agregar detalle – producto ya existe en ese pedido",
@@ -590,14 +633,14 @@
     {
       "nombre": "Actualizar detalle parcial (PATCH) – cambiar cantidad (el subtotal se recalcula solo)",
       "metodo": "PATCH",
-      "url": "/api/detalles/1",
+      "url": "/api/detalles/1/1",
       "body": { "cantidad": 5 },
-      "respuesta_esperada": { "status": 200, "subtotal_calculado": 6000.00 }
+      "respuesta_esperada": { "status": 200, "subtotal_calculado": 12502.50 }
     },
     {
       "nombre": "Actualizar detalle – sin campos válidos",
       "metodo": "PATCH",
-      "url": "/api/detalles/1",
+      "url": "/api/detalles/1/1",
       "body": { "campo_raro": 99 },
       "respuesta_esperada": { "status": 400 }
     },
@@ -609,63 +652,70 @@
       "respuesta_esperada": { "status": 200 }
     },
     {
-      "nombre": "Obtener detalle por ID (devuelve nombre y precio actual del producto)",
+      "nombre": "Obtener detalle por su clave (pedido + producto) – con precio actual del producto",
       "metodo": "GET",
-      "url": "/api/detalles/1",
+      "url": "/api/detalles/1/1",
       "body": null,
       "respuesta_esperada": {
         "status": 200,
-        "campos": ["id_detalle", "id_pedido", "cantidad", "precio_unitario", "subtotal", "producto_nombre", "producto_precio"]
+        "campos": ["id_pedido", "id_producto", "cantidad", "precio_unitario", "subtotal", "producto_nombre", "producto_precio"]
       }
     },
     {
-      "nombre": "Obtener detalle – ID no numérico",
+      "nombre": "Obtener detalle – id no numérico",
       "metodo": "GET",
-      "url": "/api/detalles/abc",
+      "url": "/api/detalles/1/abc",
       "body": null,
       "respuesta_esperada": { "status": 400 }
     },
     {
-      "nombre": "Obtener detalle – ID inexistente",
+      "nombre": "Obtener detalle – pedido inexistente",
       "metodo": "GET",
-      "url": "/api/detalles/9999",
+      "url": "/api/detalles/9999/1",
       "body": null,
       "respuesta_esperada": { "status": 404 }
     },
     {
       "nombre": "Reemplazar detalle (PUT) – el subtotal lo calcula el servidor (2 x 1200 = 2400)",
       "metodo": "PUT",
-      "url": "/api/detalles/1",
-      "body": { "id_pedido": 1, "id_producto": 3, "cantidad": 2, "precio_unitario": 1200.00 },
+      "url": "/api/detalles/1/1",
+      "body": { "cantidad": 2, "precio_unitario": 1200.00 },
       "respuesta_esperada": { "status": 200, "subtotal_calculado": 2400.00 }
     },
     {
       "nombre": "Reemplazar detalle – faltan campos obligatorios",
       "metodo": "PUT",
-      "url": "/api/detalles/1",
-      "body": { "id_pedido": 1 },
+      "url": "/api/detalles/1/1",
+      "body": {},
       "respuesta_esperada": { "status": 400 }
     },
     {
       "nombre": "Reemplazar detalle – cantidad negativa",
       "metodo": "PUT",
-      "url": "/api/detalles/1",
-      "body": { "id_pedido": 1, "id_producto": 3, "cantidad": -2, "precio_unitario": 1200.00 },
+      "url": "/api/detalles/1/1",
+      "body": { "cantidad": -2, "precio_unitario": 1200.00 },
       "respuesta_esperada": { "status": 400 }
     },
     {
-      "nombre": "Eliminar detalle – ID inexistente",
+      "nombre": "Eliminar detalle – pedido inexistente",
       "metodo": "DELETE",
-      "url": "/api/detalles/9999",
+      "url": "/api/detalles/9999/1",
       "body": null,
       "respuesta_esperada": { "status": 404 }
     },
     {
-      "nombre": "Eliminar detalle – el creado en el primer caso (id_detalle 13)",
+      "nombre": "Eliminar detalle – el creado en el primer caso (pedido 1, producto 2)",
       "metodo": "DELETE",
-      "url": "/api/detalles/13",
+      "url": "/api/detalles/1/2",
       "body": null,
       "respuesta_esperada": { "status": 200 }
+    },
+    {
+      "nombre": "[TP5 TOTAL] El total del pedido quedó recalculado tras tocar los detalles (2400 + 3600 = 6000)",
+      "metodo": "GET",
+      "url": "/api/pedidos/1",
+      "body": null,
+      "respuesta_esperada": { "status": 200, "total_esperado": 6000.00 }
     }
   ],
 

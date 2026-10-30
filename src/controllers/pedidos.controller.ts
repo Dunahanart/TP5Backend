@@ -2,35 +2,14 @@ import type { NextFunction, Request, Response } from 'express';
 import pedidoModel from '../models/pedidos.model.js';
 import { leerId, ID_INVALIDO } from '../utils/params.js';
 
-// Los estados posibles del pedido, tienen que coincidir con el ENUM de la BD
-const ESTADOS_PERMITIDOS = ['pendiente', 'enviado', 'entregado', 'cancelado'];
-
-// La BD tiene un CHECK que impide totales negativos, pero si lo dejamos pasar
-// el error llega crudo como 500. Acá lo frenamos antes para devolver un 400 claro - Juan
-function totalInvalido(total: unknown): boolean {
-    return total !== undefined && (Number.isNaN(Number(total)) || Number(total) < 0);
-}
+// Los estados posibles del pedido y la validación del total están en
+// src/validators/pedidos.validators.ts (la capa de validación) - Juan
 
 class PedidoController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { id_cliente, estado } = req.body;
-
-            if (!id_cliente) {
-                res.status(400).json({ error: "El id_cliente es obligatorio para generar un pedido." });
-                return;
-            }
-
-            if (totalInvalido(req.body.total)) {
-                res.status(400).json({ error: "El total no puede ser negativo." });
-                return;
-            }
-
-            if (estado && !ESTADOS_PERMITIDOS.includes(estado)) {
-                res.status(400).json({ error: `El estado debe ser uno de: ${ESTADOS_PERMITIDOS.join(', ')}.` });
-                return;
-            }
-
+            // id_cliente obligatorio, estado del ENUM y total no negativo:
+            // ya los validó la capa de validación antes de llegar acá
             const resultado = await pedidoModel.crear(req.body);
             res.status(201).json({ mensaje: "Pedido creado exitosamente", id_pedido: resultado.id_pedido });
         } catch (error) {
@@ -40,16 +19,7 @@ class PedidoController {
 
     async obtenerTodos(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            // Las fechas tienen que venir en formato YYYY-MM-DD
-            const fechaValida = /^\d{4}-\d{2}-\d{2}$/;
-            for (const parametro of ['desde', 'hasta']) {
-                const valor = req.query[parametro];
-                if (typeof valor === 'string' && valor !== '' && !fechaValida.test(valor)) {
-                    res.status(400).json({ error: `El parámetro '${parametro}' debe tener formato YYYY-MM-DD.` });
-                    return;
-                }
-            }
-
+            // El formato de los filtros desde/hasta ya lo validó la capa de validación
             const pedidos = await pedidoModel.obtenerTodos(req.query);
             res.status(200).json(pedidos);
         } catch (error) {
@@ -82,23 +52,8 @@ class PedidoController {
                 res.status(400).json(ID_INVALIDO);
                 return;
             }
-            const { id_cliente, estado } = req.body;
-
-            if (!id_cliente) {
-                res.status(400).json({ error: "El id_cliente es obligatorio para actualizar el pedido." });
-                return;
-            }
-
-            if (totalInvalido(req.body.total)) {
-                res.status(400).json({ error: "El total no puede ser negativo." });
-                return;
-            }
-
-            if (estado && !ESTADOS_PERMITIDOS.includes(estado)) {
-                res.status(400).json({ error: `El estado debe ser uno de: ${ESTADOS_PERMITIDOS.join(', ')}.` });
-                return;
-            }
-
+            // Mismas reglas que el POST (cliente obligatorio, estado y total):
+            // ya las aplicó la capa de validación
             await pedidoModel.actualizar(id, req.body);
             res.status(200).json({ mensaje: "Pedido actualizado exitosamente" });
         } catch (error) {
@@ -113,18 +68,7 @@ class PedidoController {
                 res.status(400).json(ID_INVALIDO);
                 return;
             }
-            const { estado } = req.body;
-
-            if (totalInvalido(req.body.total)) {
-                res.status(400).json({ error: "El total no puede ser negativo." });
-                return;
-            }
-
-            if (estado && !ESTADOS_PERMITIDOS.includes(estado)) {
-                res.status(400).json({ error: `El estado debe ser uno de: ${ESTADOS_PERMITIDOS.join(', ')}.` });
-                return;
-            }
-
+            // Todo es opcional, pero lo que llegue ya vino validado por la capa
             const resultado = await pedidoModel.actualizarParcial(id, req.body);
             if (!resultado) {
                 res.status(400).json({ error: "Debe enviar al menos un campo válido a modificar." });

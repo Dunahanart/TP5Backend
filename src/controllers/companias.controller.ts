@@ -5,11 +5,7 @@ import { leerId, ID_INVALIDO } from '../utils/params.js';
 class CompaniaController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { nombre } = req.body;
-            if (!nombre) {
-                res.status(400).json({ error: "El nombre de la compañía de envío es obligatorio." });
-                return;
-            }
+            // El nombre obligatorio ya lo validó la capa de validación
             const resultado = await companiaModel.crear(req.body);
             res.status(201).json({ mensaje: "Compañía de envío creada exitosamente", id_compania: resultado.id_compania });
         } catch (error) {

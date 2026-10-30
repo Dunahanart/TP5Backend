@@ -8,13 +8,8 @@ import { leerId, ID_INVALIDO } from '../utils/params.js';
 class ClienteController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { nombre, apellido, dni } = req.body;
-
-            if (!nombre || !apellido || !dni) {
-                res.status(400).json({ error: "El nombre, apellido y DNI son campos obligatorios." });
-                return;
-            }
-
+            // Los campos obligatorios, los largos y el formato del DNI ya los
+            // validó la capa de validación antes de llegar acá - Juan
             const cliente = await clienteModel.crear(req.body);
             res.status(201).json({ mensaje: "Cliente creado exitosamente", id_cliente: cliente.id_cliente });
         } catch (error) {

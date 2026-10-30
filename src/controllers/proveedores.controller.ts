@@ -5,11 +5,7 @@ import { leerId, ID_INVALIDO } from '../utils/params.js';
 class ProveedorController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const { razon_social, cuit } = req.body;
-            if (!razon_social || !cuit) {
-                res.status(400).json({ error: "La razón social y el CUIT son obligatorios" });
-                return;
-            }
+            // Campos obligatorios y formato del CUIT: ya los validó la capa de validación
             const resultado = await proveedorModel.crear(req.body);
             res.status(201).json({ mensaje: "Proveedor creado exitosamente", id_proveedor: resultado.id_proveedor });
         } catch (error) {

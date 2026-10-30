@@ -6,22 +6,24 @@ import { leerId, ID_INVALIDO } from '../utils/params.js';
 // El precio y el subtotal los calcula el servidor, no el cliente
 // Así guardamos el precio que tenía el producto en el momento de la venta (precio histórico)
 // Si el producto cambia de precio después, el detalle ya tiene el precio viejo guardado - Leo y Juan
+//
+// [TP5] Un detalle se identifica por la pareja (id_pedido, id_producto), que viene
+// en la URL: /api/detalles/1/3  ->  pedido 1, producto 3
+
+// Lee los dos ids de la URL. Devuelve null si alguno no es un número válido.
+function leerClave(req: Request): { id_pedido: number, id_producto: number } | null {
+    const id_pedido = leerId(req.params.id_pedido);
+    const id_producto = leerId(req.params.id_producto);
+    if (id_pedido === null || id_producto === null) return null;
+    return { id_pedido, id_producto };
+}
 
 class DetallePedidoController {
     async crear(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const { id_pedido, id_producto, cantidad } = req.body;
 
-            if (!id_pedido || !id_producto || !cantidad) {
-                res.status(400).json({ error: "Faltan datos obligatorios (id_pedido, id_producto, cantidad)." });
-                return;
-            }
-
-            if (Number(cantidad) <= 0) {
-                res.status(400).json({ error: "La cantidad debe ser un número mayor a cero." });
-                return;
-            }
-
+            // id_pedido, id_producto y cantidad (> 0) ya los validó la capa de validación
             // Buscamos el producto para obtener el precio actual
             const producto = await productoModel.obtenerPorId(Number(id_producto));
             if (!producto) {
@@ -32,7 +34,9 @@ class DetallePedidoController {
             const precio_unitario = producto.precio_unitario;
             const subtotal = Number(cantidad) * Number(precio_unitario);
 
-            const resultado = await detallePedidoModel.crear({
+            // El modelo crea el detalle y en la misma transacción recalcula
+            // el total del pedido como SUM(subtotal) - Juan
+            await detallePedidoModel.crear({
                 id_pedido,
                 id_producto,
                 cantidad,
@@ -42,7 +46,9 @@ class DetallePedidoController {
 
             res.status(201).json({
                 mensaje: "Detalle agregado al pedido exitosamente",
-                id_detalle: resultado.id_detalle,
+                // [TP5] Ya no existe id_detalle: la identidad del detalle es la pareja
+                id_pedido: Number(id_pedido),
+                id_producto: Number(id_producto),
                 precio_unitario,
                 subtotal
             });
@@ -53,21 +59,21 @@ class DetallePedidoController {
 
     async obtenerTodos(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const detalles = await detallePedidoModel.obtenerTodos();
+            const detalles = await detallePedidoModel.obtenerTodos(req.query);
             res.status(200).json(detalles);
         } catch (error) {
             next(error);
         }
     }
 
-    async obtenerPorId(req: Request, res: Response, next: NextFunction): Promise<void> {
+    async obtenerPorClave(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = leerId(req.params.id);
-            if (id === null) {
+            const clave = leerClave(req);
+            if (clave === null) {
                 res.status(400).json(ID_INVALIDO);
                 return;
             }
-            const detalle = await detallePedidoModel.obtenerPorId(id);
+            const detalle = await detallePedidoModel.obtenerPorClave(clave);
             if (!detalle) {
                 res.status(404).json({ error: "Detalle no encontrado." });
                 return;
@@ -101,30 +107,19 @@ class DetallePedidoController {
         }
     }
 
-    // PUT: reemplaza todos los campos del detalle
-    // Igual que el POST, el precio lo manda el cliente (para respetar el precio histórico
-    // de la venta) pero el SUBTOTAL lo calcula SIEMPRE el servidor - Juan
+    // PUT: reemplaza la cantidad y el precio de la venta.
+    // El SUBTOTAL lo calcula SIEMPRE el servidor, y el total del pedido se
+    // refresca en la misma transacción - Juan
     async actualizar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = leerId(req.params.id);
-            if (id === null) {
+            const clave = leerClave(req);
+            if (clave === null) {
                 res.status(400).json(ID_INVALIDO);
                 return;
             }
-            const { id_pedido, id_producto, cantidad, precio_unitario } = req.body;
-            if (!id_pedido || !id_producto || !cantidad || precio_unitario === undefined) {
-                res.status(400).json({ error: "Faltan datos obligatorios (id_pedido, id_producto, cantidad, precio_unitario)." });
-                return;
-            }
-            if (Number(cantidad) <= 0) {
-                res.status(400).json({ error: "La cantidad debe ser un número mayor a cero." });
-                return;
-            }
-            if (Number.isNaN(Number(precio_unitario)) || Number(precio_unitario) < 0) {
-                res.status(400).json({ error: "El precio unitario no puede ser negativo." });
-                return;
-            }
-            await detallePedidoModel.actualizar(id, req.body);
+            // Los campos obligatorios, la cantidad > 0 y el precio >= 0
+            // ya los validó la capa de validación (el subtotal lo calcula el modelo)
+            await detallePedidoModel.actualizar(clave, req.body);
             res.status(200).json({ mensaje: "Detalle actualizado exitosamente" });
         } catch (error) {
             next(error);
@@ -133,12 +128,12 @@ class DetallePedidoController {
 
     async actualizarParcial(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = leerId(req.params.id);
-            if (id === null) {
+            const clave = leerClave(req);
+            if (clave === null) {
                 res.status(400).json(ID_INVALIDO);
                 return;
             }
-            const resultado = await detallePedidoModel.actualizarParcial(id, req.body);
+            const resultado = await detallePedidoModel.actualizarParcial(clave, req.body);
             if (!resultado) {
                 res.status(400).json({ error: "Debe enviar al menos un campo válido a modificar." });
                 return;
@@ -151,12 +146,13 @@ class DetallePedidoController {
 
     async eliminar(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
-            const id = leerId(req.params.id);
-            if (id === null) {
+            const clave = leerClave(req);
+            if (clave === null) {
                 res.status(400).json(ID_INVALIDO);
                 return;
             }
-            await detallePedidoModel.eliminar(id);
+            // El modelo borra el detalle y baja el total del pedido en la misma transacción
+            await detallePedidoModel.eliminar(clave);
             res.status(200).json({ mensaje: "Detalle eliminado exitosamente" });
         } catch (error) {
             next(error);

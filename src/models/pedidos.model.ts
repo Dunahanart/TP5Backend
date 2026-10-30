@@ -1,12 +1,19 @@
 import type { Prisma } from '../generated/prisma/client.js';
 import prisma from '../config/prisma.js';
+import detallePedidoModel from './detalles_pedido.model.js';
+
+// [TP5 TOTAL] El total del pedido NO lo manda nunca el cliente: el servidor lo
+// calcula como SUM(subtotal) de los detalles del pedido. Un pedido recién creado
+// nace en 0.00 (sin detalles todavía) y va creciendo a medida que se agregan.
 
 class PedidoModel {
 
     async crear(pedido: Record<string, any>) {
-        const { total = 0.00, estado = 'pendiente', id_cliente, id_empleado, id_compania } = pedido;
+        const { estado = 'pendiente', id_cliente, id_empleado, id_compania } = pedido;
+        // Ojo: no mandamos 'total' a propósito. La BD le pone el DEFAULT 0.00
+        // y el total recién se llena cuando se agregan detalles.
         return prisma.pedidos.create({
-            data: { total, estado, id_cliente, id_empleado: id_empleado ?? null, id_compania: id_compania ?? null }
+            data: { estado, id_cliente, id_empleado: id_empleado ?? null, id_compania: id_compania ?? null }
         });
     }
 
@@ -106,21 +113,35 @@ class PedidoModel {
         };
     }
 
+    // PUT: reemplaza el pedido (sin tocar el total, que sale de los detalles).
+    // Después de guardar, refrescamos el total por si cambió el conjunto de detalles.
     async actualizar(id: number, pedido: Record<string, any>) {
-        const { total, estado = 'pendiente', id_cliente, id_empleado, id_compania } = pedido;
-        return prisma.pedidos.update({
-            where: { id_pedido: id },
-            data: { total, estado, id_cliente, id_empleado: id_empleado ?? null, id_compania: id_compania ?? null }
+        const { estado = 'pendiente', id_cliente, id_empleado, id_compania } = pedido;
+        return prisma.$transaction(async (tx) => {
+            const actualizado = await tx.pedidos.update({
+                where: { id_pedido: id },
+                data: { estado, id_cliente, id_empleado: id_empleado ?? null, id_compania: id_compania ?? null }
+            });
+            await detallePedidoModel.recalcularTotalPedido(tx, id);
+            return actualizado;
         });
     }
 
+    // PATCH: solo modifica lo que llegó. 'total' no está en la lista de campos
+    // permitidos: es un campo calculado, el cliente no lo puede tocar.
     async actualizarParcial(id: number, pedido: Record<string, any>) {
-        const permitidas = ['total', 'estado', 'id_cliente', 'id_empleado', 'id_compania'];
+        const permitidas = ['estado', 'id_cliente', 'id_empleado', 'id_compania'];
         const data = Object.fromEntries(Object.entries(pedido).filter(([campo]) => permitidas.includes(campo)));
         if (Object.keys(data).length === 0) return null;
-        return prisma.pedidos.update({ where: { id_pedido: id }, data });
+        return prisma.$transaction(async (tx) => {
+            const actualizado = await tx.pedidos.update({ where: { id_pedido: id }, data });
+            await detallePedidoModel.recalcularTotalPedido(tx, id);
+            return actualizado;
+        });
     }
 
+    // Borrar el pedido arrastra sus detalles (FK ON DELETE CASCADE), así que no
+    // hace falta recalcular nada: si no existe el pedido, tampoco existen sus detalles.
     async eliminar(id: number) {
         return prisma.pedidos.delete({ where: { id_pedido: id } });
     }

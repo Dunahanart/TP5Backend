@@ -7,6 +7,12 @@ datasource db {
   provider = "mysql"
 }
 
+// [TP5] Todas las tablas del negocio llevan auditoría:
+//   created_at se carga solo al crear (DEFAULT CURRENT_TIMESTAMP)
+//   updated_at lo escribe Prisma (@updatedAt) en cada update, y la BD también
+//              lo refresca con ON UPDATE CURRENT_TIMESTAMP si alguien toca la tabla a mano
+// Los tipos y largos coinciden con database.sql - Juan
+
 model clientes {
   id_cliente Int       @id @default(autoincrement())
   nombre     String    @db.VarChar(50)
@@ -14,6 +20,8 @@ model clientes {
   dni        String    @unique(map: "dni") @db.VarChar(15)
   direccion  String?   @db.VarChar(150)
   telefono   String?   @db.VarChar(20)
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
   pedidos    pedidos[]
 }
 
@@ -21,20 +29,29 @@ model companias_envio {
   id_compania Int       @id @default(autoincrement())
   nombre      String    @db.VarChar(100)
   telefono    String?   @db.VarChar(20)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
   pedidos     pedidos[]
 }
 
+// [TP5] Corrección 1: la identidad de un detalle es (pedido, producto).
+// No tiene id propio: la tabla de línea de detalle no existe sin su pedido ni sin su
+// producto. Es el mismo diseño que la tabla intermedia CursosEstudiantes de clase
+// (@@id([curso_id, estudiante_id])), y así se elimina el id_detalle al pedo - Juan
 model detalles_pedido {
-  id_detalle      Int        @id @default(autoincrement())
-  id_pedido       Int?
-  id_producto     Int?
+  id_pedido       Int
+  id_producto     Int
   cantidad        Int
   precio_unitario Decimal    @db.Decimal(10, 2)
   subtotal        Decimal    @db.Decimal(10, 2)
-  pedidos         pedidos?   @relation(fields: [id_pedido], references: [id_pedido], onDelete: Cascade, map: "fk_detalles_pedido")
-  productos       productos? @relation(fields: [id_producto], references: [id_producto], onDelete: Restrict, map: "fk_detalles_producto")
+  created_at      DateTime   @default(now())
+  updated_at      DateTime   @updatedAt
+  pedidos         pedidos    @relation(fields: [id_pedido], references: [id_pedido], onDelete: Cascade, map: "fk_detalles_pedido")
+  productos       productos  @relation(fields: [id_producto], references: [id_producto], onDelete: Restrict, map: "fk_detalles_producto")
 
-  @@unique([id_pedido, id_producto], map: "pedido_producto")
+  // En MySQL la clave primaria siempre se llama PRIMARY, así que no hace falta
+  // ponerle nombre con map (a diferencia de lo que se ve en otras bases)
+  @@id([id_pedido, id_producto])
   @@index([id_producto], map: "fk_detalles_producto")
 }
 
@@ -43,6 +60,11 @@ model empleados {
   nombre      String    @db.VarChar(50)
   apellido    String    @db.VarChar(50)
   cargo       String?   @db.VarChar(50)
+  // [TP5] Soft delete: un empleado con ventas no se borra, se desactiva.
+  // Así los pedidos existentes siguen sabiendo quién hizo la venta
+  activo      Boolean   @default(true)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
   pedidos     pedidos[]
 }
 
@@ -54,10 +76,14 @@ model pedidos {
   id_cliente      Int?
   id_empleado     Int?
   id_compania     Int?
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
   detalles_pedido detalles_pedido[]
   clientes        clientes?         @relation(fields: [id_cliente], references: [id_cliente], onDelete: Restrict, map: "fk_pedidos_cliente")
-  companias_envio companias_envio?  @relation(fields: [id_compania], references: [id_compania], map: "fk_pedidos_compania")
-  empleados       empleados?        @relation(fields: [id_empleado], references: [id_empleado], map: "fk_pedidos_empleado")
+  // [TP5] Restrict en empleado y compañía: no se puede borrar un registro que ya
+  // tiene ventas registradas (la API contesta 409 con datos asociados)
+  empleados       empleados?        @relation(fields: [id_empleado], references: [id_empleado], onDelete: Restrict, map: "fk_pedidos_empleado")
+  companias_envio companias_envio?  @relation(fields: [id_compania], references: [id_compania], onDelete: Restrict, map: "fk_pedidos_compania")
 
   @@index([id_cliente], map: "fk_pedidos_cliente")
   @@index([id_compania], map: "fk_pedidos_compania")
@@ -71,8 +97,11 @@ model productos {
   precio_unitario Decimal           @db.Decimal(10, 2)
   stock           Int               @default(0)
   id_proveedor    Int?
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
   detalles_pedido detalles_pedido[]
-  proveedores     proveedores?      @relation(fields: [id_proveedor], references: [id_proveedor], map: "fk_productos_proveedor")
+  // [TP5] Restrict: no se borra un proveedor que todavía tiene productos cargados
+  proveedores     proveedores?      @relation(fields: [id_proveedor], references: [id_proveedor], onDelete: Restrict, map: "fk_productos_proveedor")
 
   @@index([id_proveedor], map: "fk_productos_proveedor")
 }
@@ -83,6 +112,8 @@ model proveedores {
   cuit         String      @unique(map: "cuit") @db.VarChar(15)
   telefono     String?     @db.VarChar(20)
   email        String?     @db.VarChar(100)
+  created_at   DateTime    @default(now())
+  updated_at   DateTime    @updatedAt
   productos    productos[]
 }
 
