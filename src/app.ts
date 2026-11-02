@@ -2,7 +2,7 @@ import morgan from 'morgan';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import prisma from './config/prisma.js';
 import errorHandler from './middlewares/errorHandler.middleware.js';
-
+import cors from 'cors';
 import proveedoresRoutes from './routes/proveedores.routes.js';
 import productosRoutes from './routes/productos.routes.js';
 import clientesRoutes from './routes/clientes.routes.js';
@@ -16,6 +16,7 @@ const app = express();
 
 app.use(morgan('combined')); // morgan loguea cada request en la consola
 app.use(express.json());
+app.use(cors({ origin: '*' })); // habilita CORS para cualquier origen
 
 // Ruta de prueba para ver si la conexión a la BD anda
 // Usamos $queryRaw que es SQL puro - si esto responde bien, todo está ok
