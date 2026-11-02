@@ -128,7 +128,7 @@ CREATE TABLE `pedidos` (
     -- [CORRECCION 5] El total de un pedido tampoco puede ser negativo
     `total`       DECIMAL(10,2) NOT NULL DEFAULT 0.00 CHECK (`total` >= 0),
     -- [CORRECCION 4] Estado del pedido: si no se indica, nace 'pendiente'.
-    -- (El profesor menciona también 'cancelado', así que incluimos los 4 valores)
+    -- (El profe menciona también 'cancelado', así que incluimos los 4 valores)
     `estado`      ENUM('pendiente','enviado','entregado','cancelado') NOT NULL DEFAULT 'pendiente',
     `id_cliente`  INT(11) DEFAULT NULL,
     `id_empleado` INT(11) DEFAULT NULL,
